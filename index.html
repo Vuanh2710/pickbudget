@@ -20,7 +20,7 @@
         #toast { visibility: hidden; min-width: 250px; margin-left: -125px; background-color: #333; color: #fff; text-align: center; border-radius: 8px; padding: 16px; position: fixed; z-index: 1000; left: 50%; bottom: 30px; transition: visibility 0.5s, opacity 0.5s linear; opacity: 0; }
         #toast.show { visibility: visible; opacity: 1; }
         .modal { transition: opacity 0.3s ease; }
-        .history-item { transition: background-color 0.2s; }
+        .history-item { transition: background-color: 0.2s; }
         .history-item:hover { background-color: #f3f4f6; }
     </style>
 </head>
@@ -447,6 +447,37 @@
             }
         }
         
+        async function viewHistoryDetail(roomId) {
+            const roomDoc = await getDoc(doc(db, getRoomDocPath(roomId)));
+            if(!roomDoc.exists()) return;
+            
+            const roomData = roomDoc.data();
+            const playersSnapshot = await getDocs(collection(db, getParticipantsCollectionPath(roomId)));
+            const matchesSnapshot = await getDocs(query(collection(db, getMatchesCollectionPath(roomId)), orderBy("createdAt", "desc")));
+            
+            const detailPlayers = playersSnapshot.docs.map(d => ({id: d.id, ...d.data()}));
+            const detailMatches = matchesSnapshot.docs.map(d => ({id: d.id, ...d.data()}));
+            
+            const summaryHTML = generateSummaryHTML(detailPlayers, detailMatches, true);
+            
+            historyDetailModal.innerHTML = `
+                 <div class="relative mx-auto p-5 border w-11/12 max-w-4xl shadow-lg rounded-md bg-white">
+                    <div class="text-center">
+                        <h3 class="text-2xl leading-6 font-bold text-gray-900">${roomData.roomName}</h3>
+                        <p class="text-sm text-gray-500 mb-4">Tổng kết buổi chơi ngày ${new Date(roomData.createdAt.seconds * 1000).toLocaleString()}</p>
+                    </div>
+                    <div class="max-h-[70vh] overflow-y-auto p-4 bg-gray-50 rounded-lg">
+                        ${summaryHTML}
+                    </div>
+                    <div class="text-center mt-4">
+                        <button id="closeHistoryDetailBtn" class="px-4 py-2 bg-gray-200 text-gray-800 rounded-md">Đóng</button>
+                    </div>
+                </div>
+            `;
+            historyDetailModal.classList.remove('hidden');
+            document.getElementById('closeHistoryDetailBtn').addEventListener('click', () => historyDetailModal.classList.add('hidden'));
+        }
+        
         function checkUrlForRoom() {
             const params = new URLSearchParams(window.location.search);
             const roomIdFromUrl = params.get('room');
@@ -462,9 +493,6 @@
             updateMatchActions();
             renderSummaryAndHistory();
         }
-
-        // --- The rest of the functions (handleRecordResult, handleEditPlayer, etc.) are mostly the same ---
-        // --- but adapted to use the new Firestore paths and data structures ---
 
         backToLobbyBtn.addEventListener('click', showLobbyScreen);
         
@@ -580,16 +608,125 @@
             });
         }
         
-        function updateMatchActions() { /* ... same as before ... */ }
-        function renderSummaryAndHistory() { /* ... same as before ... */ }
-        function generateSummaryHTML(players, gameMatches, isReadOnly) { /* ... same as before ... */ }
-        async function handleRecordResult() { /* ... same as before ... */ }
+        function updateMatchActions() {
+             if (teamA.length === 2 && teamB.length === 2) {
+                const teamAName = document.getElementById('teamAName').value || 'Đội A';
+                const teamBName = document.getElementById('teamBName').value || 'Đội B';
+                matchActionsEl.innerHTML = `
+                    <div class="flex items-end gap-4 justify-center">
+                        <div class="text-center">
+                            <label for="scoreA" class="font-semibold text-sm text-blue-800">${teamAName}</label>
+                            <input type="number" id="scoreA" class="w-20 p-2 text-center text-lg font-bold border-2 rounded-md" min="0">
+                        </div>
+                        <div class="text-gray-400 font-bold text-lg pb-2">-</div>
+                        <div class="text-center">
+                            <label for="scoreB" class="font-semibold text-sm text-green-800">${teamBName}</label>
+                            <input type="number" id="scoreB" class="w-20 p-2 text-center text-lg font-bold border-2 rounded-md" min="0">
+                        </div>
+                    </div>
+                    <button id="recordMatchBtn" class="mt-4 w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 px-4 rounded-lg transition">
+                        <i class="fas fa-check-circle mr-2"></i>Ghi Nhận Kết Quả
+                    </button>
+                `;
+                document.getElementById('recordMatchBtn').addEventListener('click', handleRecordResult);
+            } else {
+                matchActionsEl.innerHTML = '<p class="text-gray-500">Kéo đủ 2 người vào mỗi đội.</p>';
+            }
+        }
+        
+        function renderSummaryAndHistory() {
+            summarySection.innerHTML = generateSummaryHTML(allPlayers, matches, false);
+        }
+        
+        function generateSummaryHTML(players, gameMatches, isReadOnly) {
+            const summaryData = players.map(player => {
+                const losses = gameMatches.reduce((count, match) => count + (match.losers.includes(player.id) ? 1 : 0), 0);
+                return { ...player, losses, due: losses * LOSER_FEE };
+            });
+            
+            const historyRows = gameMatches.map(match => `
+                <tr>
+                    <td class="px-4 py-4">
+                        <div class="font-bold text-green-600">${match.winningTeam.name}</div>
+                        <div class="text-sm text-gray-500">${match.winningTeam.players.join(' & ')}</div>
+                    </td>
+                    <td class="px-4 py-4">
+                        <div class="font-bold text-red-600">${match.losingTeam.name}</div>
+                        <div class="text-sm text-gray-500">${match.losingTeam.players.join(' & ')}</div>
+                    </td>
+                    <td class="px-4 py-4 text-center">
+                        <span class="text-lg font-bold text-gray-800">${match.score}</span>
+                    </td>
+                </tr>`).join('');
+
+            const summaryRows = summaryData.map(player => `
+                <tr>
+                    <td class="px-6 py-4 whitespace-nowrap">
+                        <div class="flex items-center">
+                            ${player.isGuest ? '<i class="fas fa-user-tag text-gray-400 w-6 text-center" title="Khách"></i>' : `<img src="${player.photoURL}" class="w-6 h-6 rounded-full">`}
+                            <div class="ml-2 text-sm font-medium text-gray-900">${player.name}</div>
+                        </div>
+                    </td>
+                    <td class="px-6 py-4 whitespace-nowrap text-center"><span class="text-sm font-semibold ${player.losses > 0 ? 'text-red-600' : 'text-green-600'}">${player.losses}</span></td>
+                    <td class="px-6 py-4 whitespace-nowrap text-right"><span class="text-sm font-semibold text-gray-800">${player.due.toLocaleString('vi-VN')}</span></td>
+                </tr>`).join('');
+
+            return `
+                <div class="bg-white p-6 rounded-xl shadow-md mt-8">
+                    <h2 class="text-xl font-bold mb-4"><i class="fas fa-history mr-2"></i>Lịch sử trận đấu</h2>
+                    <div class="overflow-x-auto"><table class="min-w-full divide-y divide-gray-200"><thead class="bg-gray-50"><tr><th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Thắng</th><th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Thua</th><th class="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase">Tỷ số</th></tr></thead><tbody class="bg-white divide-y divide-gray-200">${historyRows || '<tr><td colspan="3" class="text-center py-4 text-gray-500">Chưa có trận đấu nào.</td></tr>'}</tbody></table></div>
+                </div>
+                <div class="bg-white p-6 rounded-xl shadow-md mt-8">
+                    <h2 class="text-xl font-bold mb-4"><i class="fas fa-chart-line mr-2"></i>Bảng tổng kết tiền phạt</h2>
+                    <div class="overflow-x-auto"><table class="min-w-full divide-y divide-gray-200"><thead class="bg-gray-50"><tr><th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Người chơi</th><th class="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase">Số trận thua</th><th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">Tiền phạt (VND)</th></tr></thead><tbody class="bg-white divide-y divide-gray-200">${summaryRows || '<tr><td colspan="3" class="text-center py-4 text-gray-500">Chưa có dữ liệu.</td></tr>'}</tbody></table></div>
+                </div>
+            `;
+        }
+        
+        async function handleRecordResult() {
+            const scoreAEl = document.getElementById('scoreA');
+            const scoreBEl = document.getElementById('scoreB');
+            const scoreA = parseInt(scoreAEl.value, 10);
+            const scoreB = parseInt(scoreBEl.value, 10);
+
+            if (isNaN(scoreA) || isNaN(scoreB) || scoreA === scoreB) {
+                showToast("Vui lòng nhập tỷ số hợp lệ và không bằng nhau.", true);
+                return;
+            }
+            const getPlayerNames = (idArray) => idArray.map(id => allPlayers.find(p => p.id === id)?.name || 'N/A');
+            
+            const matchData = {
+                createdAt: new Date(),
+                winners: scoreA > scoreB ? teamA : teamB,
+                losers: scoreA < scoreB ? teamA : teamB,
+                winningTeam: { name: scoreA > scoreB ? document.getElementById('teamAName').value : document.getElementById('teamBName').value, players: getPlayerNames(scoreA > scoreB ? teamA : teamB) },
+                losingTeam: { name: scoreA < scoreB ? document.getElementById('teamAName').value : document.getElementById('teamBName').value, players: getPlayerNames(scoreA < scoreB ? teamA : teamB) },
+                score: `${Math.max(scoreA, scoreB)} - ${Math.min(scoreA, scoreB)}`
+            };
+            try {
+                await addDoc(collection(db, getMatchesCollectionPath(currentRoomId)), matchData);
+                showToast(`Đã ghi nhận trận đấu.`);
+                teamA = []; teamB = [];
+                renderAllGameUI();
+            } catch (error) { 
+                console.error("Error recording match:", error);
+                showToast("Lỗi khi ghi nhận trận đấu", true); 
+            }
+        }
+
         async function handleDeletePlayer(id, name) {
             if (confirm(`Bạn có chắc muốn xóa "${name}"?`)) {
                 await deleteDoc(doc(db, getParticipantsCollectionPath(currentRoomId), id));
             }
         }
-        function showToast(message, isError = false) { /* ... same as before ... */ }
+        
+        function showToast(message, isError = false) {
+            const toast = document.getElementById('toast');
+            toast.textContent = message;
+            toast.className = 'show';
+            toast.style.backgroundColor = isError ? '#EF4444' : '#22C55E';
+            setTimeout(() => { toast.className = toast.className.replace('show', ''); }, 3000);
+        }
         
         // --- Start the app ---
         initializeAppLogic();
