@@ -3,14 +3,13 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Quản lý Quỹ Pickleball (Đa người dùng)</title>
+    <title>Quản lý Quỹ Pickleball</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link href="https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:wght@400;500;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/drag-drop-touch@1.3.1/DragDropTouch.js"></script>
     <style>
-        body { font-family: 'Be Vietnam Pro', sans-serif; -webkit-tap-highlight-color: transparent; }
+        body { font-family: 'Be Vietnam Pro', sans-serif; }
         .player-card { transition: all 0.2s ease-in-out; cursor: grab; }
         .player-card:active { cursor: grabbing; }
         .player-card.dragging { opacity: 0.5; transform: scale(1.05); }
@@ -18,523 +17,653 @@
         .player-card:hover .actions { opacity: 1; }
         .dropzone { transition: all 0.2s ease-in-out; border-style: dashed; }
         .dropzone.drag-over { background-color: #e0f2fe; border-style: solid; border-color: #3b82f6; }
-        .team-dropzone { cursor: pointer; }
-        .tab-btn.active { border-color: #3B82F6; color: #3B82F6; background-color: #EFF6FF; }
         #toast { visibility: hidden; min-width: 250px; margin-left: -125px; background-color: #333; color: #fff; text-align: center; border-radius: 8px; padding: 16px; position: fixed; z-index: 1000; left: 50%; bottom: 30px; transition: visibility 0.5s, opacity 0.5s linear; opacity: 0; }
         #toast.show { visibility: visible; opacity: 1; }
+        .modal { transition: opacity 0.3s ease; }
+        .history-item { transition: background-color 0.2s; }
+        .history-item:hover { background-color: #f3f4f6; }
     </style>
 </head>
-<body class="bg-gray-100 text-gray-800">
+<body class="bg-gray-50 text-gray-800">
 
-    <!-- Auth Screen -->
-    <div id="authScreen" class="flex items-center justify-center min-h-screen">
-        <div class="text-center p-8 bg-white rounded-xl shadow-lg">
-            <h1 class="text-3xl font-bold text-blue-600 mb-2">Quản lý Quỹ Pickleball</h1>
-            <p class="text-gray-500 mb-6">Vui lòng đăng nhập để bắt đầu</p>
-            <button id="loginBtn" class="bg-blue-500 hover:bg-blue-600 text-white font-bold py-3 px-6 rounded-lg transition duration-300 flex items-center mx-auto">
-                <i class="fab fa-google mr-3"></i> Đăng nhập với Google
-            </button>
+    <!-- Screen: Lobby -->
+    <div id="lobbyScreen" class="container mx-auto max-w-xl p-4 md:p-8">
+        <header class="text-center mb-8">
+            <h1 class="text-3xl md:text-4xl font-bold text-blue-600">
+                <i class="fas fa-pickleball" style="color: #22c55e;"></i> Pickleball Rooms
+            </h1>
+            <p class="text-gray-500 mt-2">Tạo phòng mới hoặc tham gia phòng đã có để bắt đầu.</p>
+        </header>
+
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-8">
+            <!-- Create Room -->
+            <div class="bg-white p-6 rounded-xl shadow-md">
+                <h2 class="text-xl font-bold mb-4 border-b pb-2 text-blue-700">Tạo phòng mới</h2>
+                <div class="space-y-4">
+                    <input type="text" id="hostNameInput" class="w-full p-3 border border-gray-300 rounded-lg" placeholder="Tên của bạn (chủ phòng)">
+                    <input type="text" id="roomNameInput" class="w-full p-3 border border-gray-300 rounded-lg" placeholder="Tên phòng (ví dụ: Giao lưu cuối tuần)">
+                    <button id="createRoomBtn" class="w-full bg-blue-500 hover:bg-blue-600 text-white font-bold py-3 px-6 rounded-lg transition duration-300">
+                        <i class="fas fa-plus-circle mr-2"></i>Tạo Phòng
+                    </button>
+                </div>
+            </div>
+
+            <!-- Join Room -->
+            <div class="bg-white p-6 rounded-xl shadow-md">
+                <h2 class="text-xl font-bold mb-4 border-b pb-2 text-green-700">Tham gia phòng</h2>
+                <div class="space-y-4">
+                    <input type="text" id="joinRoomIdInput" class="w-full p-3 border border-gray-300 rounded-lg" placeholder="Nhập ID phòng">
+                    <button id="joinRoomBtn" class="w-full bg-green-500 hover:bg-green-600 text-white font-bold py-3 px-6 rounded-lg transition duration-300">
+                        <i class="fas fa-sign-in-alt mr-2"></i>Vào Phòng
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- History -->
+        <div class="bg-white p-6 rounded-xl shadow-md mt-8">
+            <h2 class="text-xl font-bold mb-4"><i class="fas fa-history mr-2"></i>Lịch sử các phòng đã tham gia</h2>
+            <div id="historyList" class="space-y-3 max-h-60 overflow-y-auto">
+                <p class="text-gray-500">Chưa có lịch sử...</p>
+            </div>
         </div>
     </div>
 
-    <!-- Main App Screen (Lobby, Session, History) -->
-    <div id="mainApp" class="hidden container mx-auto p-4 md:p-6 max-w-6xl">
-        <header class="flex justify-between items-center mb-6">
-            <h1 class="text-2xl font-bold text-blue-600">
-                <i class="fas fa-pickleball" style="color: #22c55e;"></i> Pickleball Manager
-            </h1>
-            <div class="flex items-center gap-4">
-                <span id="userInfo" class="text-sm text-gray-600"></span>
-                <button id="logoutBtn" class="bg-red-500 hover:bg-red-600 text-white font-bold py-2 px-4 rounded-lg transition text-sm">
-                    Đăng xuất
-                </button>
+    <!-- Screen: Game -->
+    <div id="gameScreen" class="hidden container mx-auto p-4 md:p-6 max-w-5xl">
+        <header class="text-center mb-8">
+            <h1 id="gameRoomName" class="text-3xl md:text-4xl font-bold text-blue-600"></h1>
+            <p class="text-gray-500 mt-2">Kéo thả người chơi, nhập tỷ số và theo dõi lịch sử trận đấu.</p>
+            <div class="mt-2 text-sm text-gray-500">
+                <span>Room ID: <span id="gameRoomId" class="font-mono bg-gray-200 px-2 py-1 rounded"></span></span>
+                <button id="copyRoomIdBtn" class="ml-2 text-blue-500 hover:text-blue-700"><i class="fas fa-copy"></i></button>
             </div>
         </header>
 
-        <!-- Lobby Screen -->
-        <div id="lobbyScreen">
-            <div class="border-b border-gray-200 mb-6">
-                <nav class="-mb-px flex space-x-6" aria-label="Tabs">
-                    <button id="lobbyTabBtn" class="tab-btn whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm">Phòng Chơi</button>
-                    <button id="historyTabBtn" class="tab-btn whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300">Lịch Sử</button>
-                </nav>
-            </div>
-
-            <div id="lobbyContent">
-                <div class="bg-white p-6 rounded-xl shadow-md">
-                    <h2 class="text-xl font-bold mb-4">Tham gia hoặc Tạo phòng chơi mới</h2>
-                    <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
-                        <div class="flex flex-col gap-2">
-                             <label for="joinSessionId" class="font-medium">Nhập ID phòng để tham gia:</label>
-                             <div class="flex gap-2">
-                                <input type="text" id="joinSessionId" placeholder="VD: 20250708-141700" class="flex-grow p-3 border border-gray-300 rounded-lg">
-                                <button id="joinSessionBtn" class="bg-blue-500 hover:bg-blue-600 text-white font-bold py-3 px-4 rounded-lg">Vào</button>
-                             </div>
-                        </div>
-                        <div class="flex flex-col gap-2 justify-end">
-                            <button id="createSessionBtn" class="bg-green-500 hover:bg-green-600 text-white font-bold py-3 px-6 rounded-lg w-full">
-                                <i class="fas fa-plus mr-2"></i>Tạo phòng chơi mới
-                            </button>
-                        </div>
-                    </div>
-                </div>
-            </div>
-
-            <div id="historyContent" class="hidden">
-                 <div class="bg-white p-6 rounded-xl shadow-md">
-                    <h2 class="text-xl font-bold mb-4">Các buổi chơi đã tham gia</h2>
-                    <div id="sessionHistoryList" class="space-y-3">
-                        <p class="text-gray-500">Chưa có lịch sử để hiển thị.</p>
-                    </div>
-                </div>
+        <!-- Player Management -->
+        <div class="bg-white p-6 rounded-xl shadow-md mb-8">
+            <h2 class="text-xl font-bold mb-4 border-b pb-2"><i class="fas fa-users mr-2"></i>Quản lý người chơi</h2>
+            <div class="flex flex-col sm:flex-row gap-4">
+                <input type="text" id="newPlayerName" class="flex-grow p-3 border border-gray-300 rounded-lg" placeholder="Nhập tên, thêm nhiều người bằng dấu phẩy...">
+                <button id="addPlayerBtn" class="bg-blue-500 hover:bg-blue-600 text-white font-bold py-3 px-6 rounded-lg"><i class="fas fa-plus mr-2"></i>Thêm</button>
             </div>
         </div>
 
-        <!-- Session Screen -->
-        <div id="sessionScreen" class="hidden">
-             <button id="backToLobbyBtn" class="mb-4 bg-gray-200 hover:bg-gray-300 text-gray-800 font-bold py-2 px-4 rounded-lg">
-                <i class="fas fa-arrow-left mr-2"></i> Quay lại Sảnh
-            </button>
-            <h2 class="text-2xl font-bold mb-4">Phòng chơi: <span id="currentSessionIdDisplay" class="text-blue-600"></span></h2>
-            
-            <!-- Player Management -->
-            <div class="bg-white p-6 rounded-xl shadow-md mb-8">
-                <h3 class="text-xl font-bold mb-4 border-b pb-2"><i class="fas fa-users mr-2"></i>Quản lý người chơi</h3>
-                <div class="flex flex-col sm:flex-row gap-4">
-                    <input type="text" id="newPlayerName" class="flex-grow p-3 border border-gray-300 rounded-lg" placeholder="Nhập tên, thêm nhiều người bằng dấu phẩy...">
-                    <button id="addPlayerBtn" class="bg-blue-500 hover:bg-blue-600 text-white font-bold py-3 px-6 rounded-lg"><i class="fas fa-plus mr-2"></i>Thêm</button>
-                </div>
+        <!-- Main Content -->
+        <main class="grid grid-cols-1 md:grid-cols-3 gap-8">
+            <div id="playerPoolContainer" class="md:col-span-1 bg-white p-6 rounded-xl shadow-md dropzone">
+                <h3 class="text-lg font-bold mb-4">Người chơi sẵn sàng</h3>
+                <div id="playerList" class="space-y-3 min-h-[150px]"></div>
             </div>
-
-            <!-- Match Setup -->
-            <main class="grid grid-cols-1 md:grid-cols-3 gap-8">
-                <div id="playerPoolContainer" class="md:col-span-1 bg-white p-6 rounded-xl shadow-md dropzone">
-                    <h3 class="text-lg font-bold mb-4">Người chơi sẵn sàng</h3>
-                    <div id="playerList" class="space-y-3 min-h-[150px]"></div>
-                </div>
-                <div class="md:col-span-2 bg-white p-6 rounded-xl shadow-md">
-                    <h3 class="text-lg font-bold mb-4">Thiết lập trận đấu</h3>
-                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-6">
-                        <div>
-                            <input type="text" id="teamAName" value="Đội A" class="w-full p-2 border-b-2 font-bold text-blue-800 bg-blue-50 rounded-t-lg text-center">
-                            <div id="teamADropzone" data-team="A" class="team-dropzone dropzone p-4 bg-blue-50 rounded-b-lg min-h-[120px] border-2 border-blue-300 space-y-3"></div>
-                        </div>
-                        <div>
-                            <input type="text" id="teamBName" value="Đội B" class="w-full p-2 border-b-2 font-bold text-green-800 bg-green-50 rounded-t-lg text-center">
-                            <div id="teamBDropzone" data-team="B" class="team-dropzone dropzone p-4 bg-green-50 rounded-b-lg min-h-[120px] border-2 border-green-300 space-y-3"></div>
-                        </div>
+            <div class="md:col-span-2 bg-white p-6 rounded-xl shadow-md">
+                <h3 class="text-lg font-bold mb-4">Thiết lập trận đấu</h3>
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-6">
+                    <div>
+                        <input type="text" id="teamAName" value="Đội A" class="w-full p-2 border-b-2 font-bold text-blue-800 bg-blue-50 rounded-t-lg text-center">
+                        <div id="teamADropzone" data-team="A" class="team-dropzone dropzone p-4 bg-blue-50 rounded-b-lg min-h-[120px] border-2 border-blue-300 space-y-3"></div>
                     </div>
-                    <div id="matchActions" class="mt-6 text-center"></div>
+                    <div>
+                        <input type="text" id="teamBName" value="Đội B" class="w-full p-2 border-b-2 font-bold text-green-800 bg-green-50 rounded-t-lg text-center">
+                        <div id="teamBDropzone" data-team="B" class="team-dropzone dropzone p-4 bg-green-50 rounded-b-lg min-h-[120px] border-2 border-green-300 space-y-3"></div>
+                    </div>
                 </div>
-            </main>
-
-            <!-- Summary Section -->
-            <div id="summarySection">
-                <div id="historyContainer" class="bg-white p-6 rounded-xl shadow-md mt-8">
-                    <h2 class="text-xl font-bold mb-4"><i class="fas fa-history mr-2"></i>Lịch sử trận đấu (trong phòng này)</h2>
-                    <div class="overflow-x-auto"><table class="min-w-full divide-y divide-gray-200"><thead class="bg-gray-50"><tr><th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Đội Thắng</th><th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Đội Thua</th><th class="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase">Tỷ số</th></tr></thead><tbody id="matchHistoryBody"></tbody></table></div>
-                </div>
-                <div id="finesContainer" class="bg-white p-6 rounded-xl shadow-md mt-8">
-                    <h2 class="text-xl font-bold mb-4"><i class="fas fa-chart-line mr-2"></i>Bảng tổng kết tiền phạt</h2>
-                    <div class="overflow-x-auto"><table class="min-w-full divide-y divide-gray-200"><thead class="bg-gray-50"><tr><th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Người chơi</th><th class="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase">Số trận thua</th><th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">Tiền phạt (VND)</th></tr></thead><tbody id="summaryTableBody"></tbody></table></div>
-                </div>
+                <div id="matchActions" class="mt-6 text-center"></div>
             </div>
-            <div class="mt-8 flex flex-col sm:flex-row justify-end gap-4">
-                <button id="exportImageBtn" class="bg-green-500 hover:bg-green-600 text-white font-bold py-3 px-6 rounded-lg"><i class="fas fa-camera-retro mr-2"></i>Xuất Ảnh Tổng Kết</button>
-                <button id="resetSessionBtn" class="bg-red-500 hover:bg-red-600 text-white font-bold py-3 px-6 rounded-lg"><i class="fas fa-sync-alt mr-2"></i>Reset Buổi Chơi</button>
+        </main>
+
+        <div id="summarySection">
+            <!-- Tables will be inserted here by JS -->
+        </div>
+
+        <div class="mt-8 flex flex-col sm:flex-row justify-between items-center gap-4">
+             <button id="backToLobbyBtn" class="bg-gray-500 hover:bg-gray-600 text-white font-bold py-3 px-6 rounded-lg transition duration-300">
+                <i class="fas fa-arrow-left mr-2"></i>Về Sảnh Chờ
+            </button>
+            <div>
+                <button id="exportImageBtn" class="bg-green-500 hover:bg-green-600 text-white font-bold py-3 px-6 rounded-lg transition duration-300 mr-2">
+                    <i class="fas fa-camera-retro mr-2"></i>Xuất Ảnh
+                </button>
+                <button id="endGameBtn" class="bg-red-500 hover:bg-red-600 text-white font-bold py-3 px-6 rounded-lg transition duration-300">
+                    <i class="fas fa-flag-checkered mr-2"></i>Kết Thúc Buổi Chơi
+                </button>
             </div>
         </div>
     </div>
-    
+
     <!-- Modals -->
-    <div id="playerSelectModal" class="fixed inset-0 bg-gray-600 bg-opacity-75 hidden z-50 flex items-center justify-center p-4"><div class="relative mx-auto p-5 border w-full max-w-sm shadow-lg rounded-md bg-white"><div class="flex justify-between items-center border-b pb-3 mb-3"><h3 class="text-lg font-medium text-gray-900">Chọn người chơi</h3><button id="closePlayerSelectModalBtn" class="text-gray-400 hover:text-gray-600"><i class="fas fa-times fa-lg"></i></button></div><div id="modalPlayerList" class="space-y-2 max-h-64 overflow-y-auto"></div></div></div>
-    <div id="imageModal" class="fixed inset-0 bg-gray-600 bg-opacity-75 hidden z-50 flex items-center justify-center"><div class="relative mx-auto p-5 border w-11/12 max-w-lg shadow-lg rounded-md bg-white"><div class="mt-3 text-center"><h3 class="text-lg font-medium text-gray-900">Ảnh Tổng Kết Buổi Chơi</h3><div class="mt-4 p-3 min-h-[200px] flex items-center justify-center bg-gray-100 rounded-lg"><p id="imageLoadingText">Đang tạo ảnh...</p><img id="resultImage" class="max-w-full h-auto hidden"/></div><div class="items-center px-4 py-3 gap-3 flex flex-col sm:flex-row"><a id="downloadImageBtn" href="#" download="tong-ket-pickleball.png" class="w-full sm:w-auto px-4 py-2 bg-blue-500 text-white rounded-md shadow-sm hover:bg-blue-600 hidden"><i class="fas fa-download mr-2"></i>Tải Ảnh</a><button id="closeImageModalBtn" class="w-full sm:w-auto mt-2 sm:mt-0 px-4 py-2 bg-gray-200 text-gray-800 rounded-md shadow-sm hover:bg-gray-300">Đóng</button></div></div></div></div>
+    <div id="imageModal" class="modal fixed inset-0 bg-gray-600 bg-opacity-75 h-full w-full hidden z-50 flex items-center justify-center"></div>
+    <div id="historyDetailModal" class="modal fixed inset-0 bg-gray-600 bg-opacity-75 h-full w-full hidden z-50 flex items-center justify-center p-4"></div>
     <div id="toast"></div>
 
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
-        import { getAuth, GoogleAuthProvider, signInWithRedirect, getRedirectResult, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
-        import { getFirestore, collection, doc, addDoc, onSnapshot, query, writeBatch, getDocs, deleteDoc, updateDoc, orderBy, serverTimestamp, getDoc, setDoc, arrayUnion } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+        import { getAuth, signInAnonymously, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { getFirestore, collection, doc, addDoc, onSnapshot, query, writeBatch, getDocs, deleteDoc, updateDoc, orderBy, getDoc, setDoc } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 
         const firebaseConfig = {
-          apiKey: "AIzaSyDRvpyEc0oVdBESigc5NoOlb_jFO9tLMwY",
-          authDomain: "pickbudget-df336.firebaseapp.com",
-          projectId: "pickbudget-df336",
-          storageBucket: "pickbudget-df336.appspot.com",
-          messagingSenderId: "1007097338414",
-          appId: "1:1007097338414:web:82c65a5ae6784c83555dbf",
-          measurementId: "G-BEGDMV8RD7"
+            apiKey: "AIzaSyDRvpyEc0oVdBESigc5NoOlb_jFO9tLMwY",
+            authDomain: "pickbudget-df336.firebaseapp.com",
+            projectId: "pickbudget-df336",
+            storageBucket: "pickbudget-df336.firebasestorage.app",
+            messagingSenderId: "1007097338414",
+            appId: "1:1007097338414:web:82c65a5ae6784c83555dbf",
+            measurementId: "G-BEGDMV8RD7"
         };
+
         const LOSER_FEE = 25000;
-
-        // --- GLOBAL STATE ---
-        let app, auth, db, currentUser;
-        let currentSessionId = null;
+        let app, auth, db, authUser;
+        let currentRoomId = null;
         let allPlayers = [], matches = [], teamA = [], teamB = [];
-        let unsubscribePlayers, unsubscribeMatches;
+        let unsubscribePlayers, unsubscribeMatches, unsubscribeRoom;
 
-        // --- UI ELEMENTS ---
-        const authScreen = document.getElementById('authScreen');
-        const mainApp = document.getElementById('mainApp');
+        // --- FIX: Define appId and correct Firestore paths ---
+        const appId = typeof __app_id !== 'undefined' ? __app_id : 'pickleball-default-public';
+        const getRoomsCollectionPath = () => `artifacts/${appId}/public/data/pickleball_rooms`;
+        const getRoomDocPath = (roomId) => `${getRoomsCollectionPath()}/${roomId}`;
+        const getPlayersCollectionPath = (roomId) => `${getRoomDocPath(roomId)}/players`;
+        const getMatchesCollectionPath = (roomId) => `${getRoomDocPath(roomId)}/matches`;
+
+
+        // --- UI Elements ---
         const lobbyScreen = document.getElementById('lobbyScreen');
-        const sessionScreen = document.getElementById('sessionScreen');
-        const lobbyContent = document.getElementById('lobbyContent');
-        const historyContent = document.getElementById('historyContent');
-        const sessionHistoryList = document.getElementById('sessionHistoryList');
+        const gameScreen = document.getElementById('gameScreen');
+        // Lobby elements
+        const createRoomBtn = document.getElementById('createRoomBtn');
+        const joinRoomBtn = document.getElementById('joinRoomBtn');
+        const hostNameInput = document.getElementById('hostNameInput');
+        const roomNameInput = document.getElementById('roomNameInput');
+        const joinRoomIdInput = document.getElementById('joinRoomIdInput');
+        const historyList = document.getElementById('historyList');
+        // Game elements
+        const gameRoomName = document.getElementById('gameRoomName');
+        const gameRoomId = document.getElementById('gameRoomId');
+        const copyRoomIdBtn = document.getElementById('copyRoomIdBtn');
         const playerListEl = document.getElementById('playerList');
-        const summaryTableBody = document.getElementById('summaryTableBody');
-        const matchHistoryBody = document.getElementById('matchHistoryBody');
-        const allUI = {
-            loginBtn: document.getElementById('loginBtn'),
-            logoutBtn: document.getElementById('logoutBtn'),
-            userInfo: document.getElementById('userInfo'),
-            lobbyTabBtn: document.getElementById('lobbyTabBtn'),
-            historyTabBtn: document.getElementById('historyTabBtn'),
-            createSessionBtn: document.getElementById('createSessionBtn'),
-            joinSessionBtn: document.getElementById('joinSessionBtn'),
-            joinSessionIdInput: document.getElementById('joinSessionId'),
-            backToLobbyBtn: document.getElementById('backToLobbyBtn'),
-            currentSessionIdDisplay: document.getElementById('currentSessionIdDisplay'),
-            newPlayerNameInput: document.getElementById('newPlayerName'),
-            addPlayerBtn: document.getElementById('addPlayerBtn'),
-            teamADropzone: document.getElementById('teamADropzone'),
-            teamBDropzone: document.getElementById('teamBDropzone'),
-            playerPoolContainer: document.getElementById('playerPoolContainer'),
-            matchActions: document.getElementById('matchActions'),
-            exportImageBtn: document.getElementById('exportImageBtn'),
-            resetSessionBtn: document.getElementById('resetSessionBtn'),
-            playerSelectModal: document.getElementById('playerSelectModal'),
-            modalPlayerList: document.getElementById('modalPlayerList'),
-            closePlayerSelectModalBtn: document.getElementById('closePlayerSelectModalBtn'),
-            imageModal: document.getElementById('imageModal'),
-            closeImageModalBtn: document.getElementById('closeImageModalBtn'),
-            downloadImageBtn: document.getElementById('downloadImageBtn'),
-            resultImage: document.getElementById('resultImage'),
-            imageLoadingText: document.getElementById('imageLoadingText'),
-        };
+        const newPlayerNameInput = document.getElementById('newPlayerName');
+        const addPlayerBtn = document.getElementById('addPlayerBtn');
+        const teamADropzone = document.getElementById('teamADropzone');
+        const teamBDropzone = document.getElementById('teamBDropzone');
+        const playerPoolContainer = document.getElementById('playerPoolContainer');
+        const matchActionsEl = document.getElementById('matchActions');
+        const summarySection = document.getElementById('summarySection');
+        const backToLobbyBtn = document.getElementById('backToLobbyBtn');
+        const exportImageBtn = document.getElementById('exportImageBtn');
+        const endGameBtn = document.getElementById('endGameBtn');
+        const imageModal = document.getElementById('imageModal');
+        const historyDetailModal = document.getElementById('historyDetailModal');
 
-        // --- INITIALIZATION ---
-        try {
-            app = initializeApp(firebaseConfig);
-            auth = getAuth(app);
-            db = getFirestore(app);
-            
-            // Handle the redirect result from Google Sign-In
-            getRedirectResult(auth)
-              .catch((error) => {
-                console.error("Error getting redirect result:", error);
-                // Handle specific errors if needed, e.g., unauthorized domain
-                if (error.code === 'auth/unauthorized-domain') {
-                    showToast('Lỗi: Tên miền chưa được ủy quyền trong Firebase.', true);
-                }
-              });
-
-            setupAuthListener();
-            setupEventListeners();
-        } catch (e) {
-            console.error("Firebase initialization failed:", e);
-            document.body.innerHTML = '<div class="text-center p-8 text-red-500">Lỗi kết nối Firebase.</div>';
+        // --- App Initialization ---
+        function initializeAppLogic() {
+            try {
+                app = initializeApp(firebaseConfig);
+                auth = getAuth(app);
+                db = getFirestore(app);
+                setupAuthListener();
+            } catch (e) {
+                console.error("Firebase initialization failed:", e);
+                document.body.innerHTML = '<div class="text-center p-8 text-red-500">Lỗi kết nối Firebase.</div>';
+            }
         }
 
-        // --- AUTHENTICATION ---
         function setupAuthListener() {
             onAuthStateChanged(auth, async (user) => {
                 if (user) {
-                    currentUser = user;
-                    const userRef = doc(db, "users", user.uid);
-                    await setDoc(userRef, {
-                        displayName: user.displayName,
-                        email: user.email,
-                        photoURL: user.photoURL
-                    }, { merge: true });
-
-                    allUI.userInfo.textContent = `Chào, ${user.displayName}`;
-                    authScreen.classList.add('hidden');
-                    mainApp.classList.remove('hidden');
-                    navigateToLobby();
+                    authUser = user;
+                    loadHistory();
+                    checkUrlForRoom();
                 } else {
-                    currentUser = null;
-                    authScreen.classList.remove('hidden');
-                    mainApp.classList.add('hidden');
+                    await signInAnonymously(auth);
                 }
-            });
-        }
-
-        // --- NAVIGATION ---
-        function navigateToLobby() {
-            if (unsubscribePlayers) unsubscribePlayers();
-            if (unsubscribeMatches) unsubscribeMatches();
-            currentSessionId = null;
-            sessionScreen.classList.add('hidden');
-            lobbyScreen.classList.remove('hidden');
-            fetchSessionHistory();
-        }
-
-        function navigateToSession(sessionId) {
-            currentSessionId = sessionId;
-            allUI.currentSessionIdDisplay.textContent = sessionId;
-            lobbyScreen.classList.add('hidden');
-            sessionScreen.classList.remove('hidden');
-            setupSessionListeners(sessionId);
-        }
-
-        // --- EVENT LISTENERS SETUP ---
-        function setupEventListeners() {
-            const provider = new GoogleAuthProvider();
-            // Changed to signInWithRedirect
-            allUI.loginBtn.onclick = () => signInWithRedirect(auth, provider);
-            allUI.logoutBtn.onclick = () => signOut(auth);
-            allUI.backToLobbyBtn.onclick = navigateToLobby;
-
-            allUI.lobbyTabBtn.onclick = () => switchTab('lobby');
-            allUI.historyTabBtn.onclick = () => switchTab('history');
-
-            allUI.createSessionBtn.onclick = createSession;
-            allUI.joinSessionBtn.onclick = () => {
-                const id = allUI.joinSessionIdInput.value.trim();
-                if (id) joinSession(id);
-            };
-            
-            // Session screen listeners
-            allUI.addPlayerBtn.onclick = () => addPlayersToSession();
-            allUI.newPlayerNameInput.onkeypress = (e) => e.key === 'Enter' && addPlayersToSession();
-            allUI.exportImageBtn.onclick = exportSummaryImage;
-            allUI.resetSessionBtn.onclick = resetCurrentSession;
-            allUI.closeImageModalBtn.onclick = () => allUI.imageModal.classList.add('hidden');
-            allUI.closePlayerSelectModalBtn.onclick = () => allUI.playerSelectModal.classList.add('hidden');
-            
-            [allUI.teamADropzone, allUI.teamBDropzone, allUI.playerPoolContainer].forEach(zone => {
-                zone.addEventListener('dragover', handleDragOver);
-                zone.addEventListener('dragleave', handleDragLeave);
-                zone.addEventListener('drop', handleDrop);
             });
         }
         
-        // --- LOBBY & HISTORY LOGIC ---
-        function switchTab(tab) {
-            if (tab === 'lobby') {
-                lobbyContent.classList.remove('hidden');
-                historyContent.classList.add('hidden');
-                allUI.lobbyTabBtn.classList.add('active');
-                allUI.historyTabBtn.classList.remove('active');
-            } else {
-                lobbyContent.classList.add('hidden');
-                historyContent.classList.remove('hidden');
-                allUI.lobbyTabBtn.classList.remove('active');
-                allUI.historyTabBtn.classList.add('active');
+        function checkUrlForRoom() {
+            const params = new URLSearchParams(window.location.search);
+            const roomIdFromUrl = params.get('room');
+            if (roomIdFromUrl) {
+                joinRoom(roomIdFromUrl);
             }
         }
 
-        async function createSession() {
-            const now = new Date();
-            const sessionId = `${now.getFullYear()}${(now.getMonth() + 1).toString().padStart(2, '0')}${now.getDate().toString().padStart(2, '0')}-${now.getHours().toString().padStart(2, '0')}${now.getMinutes().toString().padStart(2, '0')}${now.getSeconds().toString().padStart(2, '0')}`;
+        // --- Screen Management ---
+        function showLobbyScreen() {
+            if (unsubscribePlayers) unsubscribePlayers();
+            if (unsubscribeMatches) unsubscribeMatches();
+            if (unsubscribeRoom) unsubscribeRoom();
             
-            const sessionRef = doc(db, "sessions", sessionId);
-            try {
-                await setDoc(sessionRef, {
-                    hostId: currentUser.uid,
-                    hostName: currentUser.displayName,
-                    createdAt: serverTimestamp(),
-                    participants: [currentUser.uid]
-                });
-                showToast(`Đã tạo phòng: ${sessionId}`);
-                navigateToSession(sessionId);
-            } catch (error) {
-                console.error("Error creating session:", error);
-                showToast("Lỗi khi tạo phòng.", true);
-            }
+            currentRoomId = null;
+            history.pushState({}, '', window.location.pathname); // Clear room from URL
+            lobbyScreen.classList.remove('hidden');
+            gameScreen.classList.add('hidden');
+            loadHistory(); // Refresh history
         }
 
-        async function joinSession(sessionId) {
-            const sessionRef = doc(db, "sessions", sessionId);
-            try {
-                const sessionDoc = await getDoc(sessionRef);
-                if (!sessionDoc.exists()) {
-                    showToast("Phòng không tồn tại!", true);
-                    return;
-                }
-                await updateDoc(sessionRef, {
-                    participants: arrayUnion(currentUser.uid)
-                });
-                navigateToSession(sessionId);
-            } catch (error) {
-                console.error("Error joining session:", error);
-                showToast("Lỗi khi vào phòng.", true);
-            }
-        }
-
-        async function fetchSessionHistory() {
-            if (!currentUser) return;
-            const q = query(collection(db, "sessions"), where("participants", "array-contains", currentUser.uid), orderBy("createdAt", "desc"));
-            const querySnapshot = await getDocs(q);
-            
-            sessionHistoryList.innerHTML = '';
-            if (querySnapshot.empty) {
-                sessionHistoryList.innerHTML = '<p class="text-gray-500">Bạn chưa tham gia buổi chơi nào.</p>';
+        async function showGameScreen(roomId) {
+            const roomDoc = await getDoc(doc(db, getRoomDocPath(roomId)));
+            if (!roomDoc.exists()) {
+                showToast("Phòng không tồn tại!", true);
                 return;
             }
-            querySnapshot.forEach(doc => {
-                const session = doc.data();
-                const date = session.createdAt?.toDate().toLocaleDateString('vi-VN') || 'Không rõ ngày';
-                const historyItem = document.createElement('div');
-                historyItem.className = "p-4 border rounded-lg hover:bg-gray-50 cursor-pointer";
-                historyItem.innerHTML = `
-                    <div class="font-bold text-blue-600">${doc.id}</div>
-                    <div class="text-sm text-gray-500">Tạo bởi: ${session.hostName} - Ngày: ${date}</div>
-                `;
-                historyItem.onclick = () => navigateToSession(doc.id);
-                sessionHistoryList.appendChild(historyItem);
-            });
+            
+            const roomData = roomDoc.data();
+            if (roomData.status === 'finished') {
+                showToast("Buổi chơi này đã kết thúc.", true);
+                viewHistoryDetail(roomId); // Show read-only history
+                return;
+            }
+
+            currentRoomId = roomId;
+            history.pushState({roomId}, `Phòng ${roomData.roomName}`, `?room=${roomId}`);
+            
+            lobbyScreen.classList.add('hidden');
+            gameScreen.classList.remove('hidden');
+
+            gameRoomName.textContent = roomData.roomName;
+            gameRoomId.textContent = roomId;
+            
+            // Reset state for new room
+            allPlayers = []; matches = []; teamA = []; teamB = [];
+            
+            setupGameListeners(roomId);
         }
 
-        // --- SESSION LOGIC ---
-        function setupSessionListeners(sessionId) {
+        function setupGameListeners(roomId) {
+            // Detach old listeners
             if (unsubscribePlayers) unsubscribePlayers();
-            const playersQuery = query(collection(db, `sessions/${sessionId}/players`));
-            unsubscribePlayers = onSnapshot(playersQuery, (snapshot) => {
-                allPlayers = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-                renderAllInSession();
+            if (unsubscribeMatches) unsubscribeMatches();
+            if (unsubscribeRoom) unsubscribeRoom();
+
+            // Listen to room status
+            unsubscribeRoom = onSnapshot(doc(db, getRoomDocPath(roomId)), (doc) => {
+                if(doc.exists() && doc.data().status === 'finished') {
+                    showToast("Chủ phòng đã kết thúc buổi chơi.");
+                    showLobbyScreen();
+                }
             });
 
-            if (unsubscribeMatches) unsubscribeMatches();
-            const matchesQuery = query(collection(db, `sessions/${sessionId}/matches`), orderBy("createdAt", "desc"));
+            // Listen to players
+            const playersQuery = query(collection(db, getPlayersCollectionPath(roomId)));
+            unsubscribePlayers = onSnapshot(playersQuery, (snapshot) => {
+                allPlayers = snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
+                renderAllGameUI();
+            });
+
+            // Listen to matches
+            const matchesQuery = query(collection(db, getMatchesCollectionPath(roomId)), orderBy("createdAt", "desc"));
             unsubscribeMatches = onSnapshot(matchesQuery, (snapshot) => {
-                matches = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-                renderAllInSession();
+                matches = snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
+                renderAllGameUI();
             });
         }
-
-        function renderAllInSession() {
+        
+        function renderAllGameUI() {
             renderAvailablePlayers();
             renderTeams();
             updateMatchActions();
-            setupClickToAddListeners();
-            renderMatchHistory();
-            updateSummary();
+            renderSummaryAndHistory();
+        }
+
+        // --- Lobby Logic ---
+        createRoomBtn.addEventListener('click', async () => {
+            const hostName = hostNameInput.value.trim();
+            const roomName = roomNameInput.value.trim();
+            if (!hostName || !roomName) {
+                showToast("Vui lòng nhập tên bạn và tên phòng.", true);
+                return;
+            }
+
+            try {
+                const newRoomRef = doc(collection(db, getRoomsCollectionPath()));
+                const newRoomData = {
+                    hostId: authUser.uid,
+                    hostName: hostName,
+                    roomName: roomName,
+                    createdAt: new Date(),
+                    status: 'active'
+                };
+                await setDoc(newRoomRef, newRoomData);
+                addRoomToHistory(newRoomRef.id);
+                showGameScreen(newRoomRef.id);
+            } catch (error) {
+                console.error("Error creating room: ", error);
+                showToast("Lỗi khi tạo phòng.", true);
+            }
+        });
+
+        joinRoomBtn.addEventListener('click', () => {
+            const roomIdToJoin = joinRoomIdInput.value.trim();
+            if (!roomIdToJoin) {
+                showToast("Vui lòng nhập ID phòng.", true);
+                return;
+            }
+            joinRoom(roomIdToJoin);
+        });
+        
+        async function joinRoom(roomId) {
+            const roomRef = doc(db, getRoomDocPath(roomId));
+            const roomDoc = await getDoc(roomRef);
+            if (roomDoc.exists()) {
+                addRoomToHistory(roomId);
+                showGameScreen(roomId);
+            } else {
+                showToast("Không tìm thấy phòng với ID này.", true);
+            }
+        }
+
+        // --- History Logic ---
+        function getHistory() {
+            return JSON.parse(localStorage.getItem('pickleballHistory') || '[]');
+        }
+
+        function addRoomToHistory(roomId) {
+            let history = getHistory();
+            if (!history.includes(roomId)) {
+                history.unshift(roomId); // Add to the beginning
+                localStorage.setItem('pickleballHistory', JSON.stringify(history));
+            }
+        }
+
+        async function loadHistory() {
+            const historyIds = getHistory();
+            if (historyIds.length === 0) {
+                historyList.innerHTML = '<p class="text-gray-500">Chưa có lịch sử...</p>';
+                return;
+            }
+            historyList.innerHTML = ''; // Clear list
+
+            for (const roomId of historyIds) {
+                const roomDoc = await getDoc(doc(db, getRoomDocPath(roomId)));
+                if (roomDoc.exists()) {
+                    const data = roomDoc.data();
+                    const item = document.createElement('div');
+                    item.className = 'history-item p-3 border rounded-lg flex justify-between items-center cursor-pointer';
+                    item.innerHTML = `
+                        <div>
+                            <p class="font-bold">${data.roomName}</p>
+                            <p class="text-sm text-gray-500">Host: ${data.hostName} - ${new Date(data.createdAt.seconds * 1000).toLocaleDateString()}</p>
+                        </div>
+                        <span class="px-3 py-1 text-xs font-semibold rounded-full ${data.status === 'active' ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}">
+                            ${data.status === 'active' ? 'Đang chơi' : 'Đã kết thúc'}
+                        </span>
+                    `;
+                    item.addEventListener('click', () => {
+                        if (data.status === 'active') {
+                            joinRoom(roomId);
+                        } else {
+                            viewHistoryDetail(roomId);
+                        }
+                    });
+                    historyList.appendChild(item);
+                }
+            }
         }
         
-        async function addPlayersToSession() {
-            if (!currentSessionId) return;
-            const namesString = allUI.newPlayerNameInput.value.trim();
-            if (!namesString) return;
-            const names = namesString.split(',').map(name => name.trim()).filter(name => name !== '');
+        async function viewHistoryDetail(roomId) {
+            const roomDoc = await getDoc(doc(db, getRoomDocPath(roomId)));
+            if(!roomDoc.exists()) return;
+            
+            const roomData = roomDoc.data();
+            const playersSnapshot = await getDocs(collection(db, getPlayersCollectionPath(roomId)));
+            const matchesSnapshot = await getDocs(query(collection(db, getMatchesCollectionPath(roomId)), orderBy("createdAt", "desc")));
+            
+            const detailPlayers = playersSnapshot.docs.map(d => ({id: d.id, ...d.data()}));
+            const detailMatches = matchesSnapshot.docs.map(d => ({id: d.id, ...d.data()}));
+            
+            const summaryHTML = generateSummaryHTML(detailPlayers, detailMatches, true);
+            
+            historyDetailModal.innerHTML = `
+                 <div class="relative mx-auto p-5 border w-11/12 max-w-4xl shadow-lg rounded-md bg-white">
+                    <div class="text-center">
+                        <h3 class="text-2xl leading-6 font-bold text-gray-900">${roomData.roomName}</h3>
+                        <p class="text-sm text-gray-500 mb-4">Tổng kết buổi chơi ngày ${new Date(roomData.createdAt.seconds * 1000).toLocaleString()}</p>
+                    </div>
+                    <div class="max-h-[70vh] overflow-y-auto p-4 bg-gray-50 rounded-lg">
+                        ${summaryHTML}
+                    </div>
+                    <div class="text-center mt-4">
+                        <button id="closeHistoryDetailBtn" class="px-4 py-2 bg-gray-200 text-gray-800 rounded-md">Đóng</button>
+                    </div>
+                </div>
+            `;
+            historyDetailModal.classList.remove('hidden');
+            document.getElementById('closeHistoryDetailBtn').addEventListener('click', () => historyDetailModal.classList.add('hidden'));
+        }
+
+        // --- Game Logic (Copied and adapted from original) ---
+        
+        backToLobbyBtn.addEventListener('click', showLobbyScreen);
+        
+        copyRoomIdBtn.addEventListener('click', () => {
+            navigator.clipboard.writeText(currentRoomId).then(() => {
+                showToast("Đã sao chép ID phòng!");
+            }, () => {
+                showToast("Lỗi khi sao chép.", true);
+            });
+        });
+
+        endGameBtn.addEventListener('click', async () => {
+            if (confirm('Bạn có chắc chắn muốn kết thúc buổi chơi? Hành động này sẽ lưu lại kết quả và không thể chơi tiếp.')) {
+                try {
+                    await updateDoc(doc(db, getRoomDocPath(currentRoomId)), { status: 'finished' });
+                    showToast("Buổi chơi đã kết thúc.");
+                    showLobbyScreen();
+                } catch (error) {
+                    console.error("Error ending game: ", error);
+                    showToast("Lỗi khi kết thúc buổi chơi.", true);
+                }
+            }
+        });
+        
+        // Player Management
+        addPlayerBtn.addEventListener('click', async () => {
+            const namesString = newPlayerNameInput.value.trim();
+            if (!namesString || !currentRoomId) return;
+            const names = namesString.split(',').map(name => name.trim()).filter(Boolean);
             if (names.length === 0) return;
             try {
                 const batch = writeBatch(db);
                 names.forEach(name => {
-                    const newPlayerRef = doc(collection(db, `sessions/${currentSessionId}/players`));
+                    const newPlayerRef = doc(collection(db, getPlayersCollectionPath(currentRoomId)));
                     batch.set(newPlayerRef, { name });
                 });
                 await batch.commit();
-                allUI.newPlayerNameInput.value = '';
-                showToast(`Đã thêm ${names.length} người chơi vào phòng.`);
+                newPlayerNameInput.value = '';
+                showToast(`Đã thêm ${names.length} người chơi.`);
             } catch (e) {
-                console.error("Error adding players:", e);
+                console.error("Error adding players: ", e);
                 showToast("Lỗi khi thêm người chơi.", true);
             }
-        }
+        });
         
-        async function handleRecordResult() {
-            if (!currentSessionId) return;
-             const scoreAEl = document.getElementById('scoreA');
-            const scoreBEl = document.getElementById('scoreB');
-            const scoreA = parseInt(scoreAEl.value, 10);
-            const scoreB = parseInt(scoreBEl.value, 10);
-            if (isNaN(scoreA) || isNaN(scoreB)) { showToast("Vui lòng nhập đủ tỷ số.", true); return; }
-            if (scoreA === scoreB) { showToast("Tỷ số không được bằng nhau.", true); return; }
-            const teamAName = document.getElementById('teamAName').value.trim();
-            const teamBName = document.getElementById('teamBName').value.trim();
-            const winners = scoreA > scoreB ? teamA : teamB;
-            const losers = scoreA < scoreB ? teamA : teamB;
-            const winningTeamName = scoreA > scoreB ? teamAName : teamBName;
-            const losingTeamName = scoreA < scoreB ? teamAName : teamBName;
-            const getPlayerNames = (idArray) => idArray.map(id => allPlayers.find(p => p.id === id)?.name || 'N/A');
-            const matchData = {
-                createdAt: serverTimestamp(),
-                winners, losers,
-                winningTeam: { name: winningTeamName, players: getPlayerNames(winners) },
-                losingTeam: { name: losingTeamName, players: getPlayerNames(losers) },
-                score: `${Math.max(scoreA, scoreB)} - ${Math.min(scoreA, scoreB)}`
-            };
-            try {
-                await addDoc(collection(db, `sessions/${currentSessionId}/matches`), matchData);
-                showToast(`Đã ghi nhận trận đấu.`);
-                teamA = []; teamB = [];
-                renderAllInSession();
-            } catch (error) {
-                 console.error("Error recording match: ", error);
-                 showToast("Lỗi khi ghi nhận trận đấu", true);
-            }
+        // Drag and Drop Logic (same as before)
+        let draggedPlayerId = null;
+        function handleDragStart(e) {
+            draggedPlayerId = e.target.closest('.player-card').dataset.playerId;
+            setTimeout(() => e.target.closest('.player-card').classList.add('dragging'), 0);
         }
-        
-        async function resetCurrentSession() {
-            if (!currentSessionId) return;
-            if (confirm('Bạn có chắc chắn muốn xoá TẤT CẢ các trận đã đấu trong phòng này không?')) {
-                try {
-                    const matchesCollection = collection(db, `sessions/${currentSessionId}/matches`);
-                    const querySnapshot = await getDocs(matchesCollection);
-                    const batch = writeBatch(db);
-                    querySnapshot.forEach((doc) => batch.delete(doc.ref));
-                    await batch.commit();
-                    teamA = []; teamB = [];
-                    renderAllInSession();
-                    showToast("Đã reset buổi chơi thành công.");
-                } catch (error) {
-                    console.error("Error resetting session: ", error);
-                    showToast("Lỗi khi reset buổi chơi.", true);
-                }
-            }
+        function handleDragEnd(e) {
+            const card = document.querySelector(`.player-card.dragging`);
+            if (card) card.classList.remove('dragging');
+            draggedPlayerId = null;
         }
-        
+        function handleDragOver(e) {
+            e.preventDefault();
+            e.target.closest('.dropzone')?.classList.add('drag-over');
+        }
+        function handleDragLeave(e) {
+            e.target.closest('.dropzone')?.classList.remove('drag-over');
+        }
+        function handleDrop(e) {
+            e.preventDefault();
+            const dropzone = e.target.closest('.dropzone');
+            if (!dropzone || !draggedPlayerId) return;
+            dropzone.classList.remove('drag-over');
+            teamA = teamA.filter(id => id !== draggedPlayerId);
+            teamB = teamB.filter(id => id !== draggedPlayerId);
+            if (dropzone.id === 'teamADropzone' && teamA.length < 2) teamA.push(draggedPlayerId);
+            else if (dropzone.id === 'teamBDropzone' && teamB.length < 2) teamB.push(draggedPlayerId);
+            renderAllGameUI();
+        }
+        [teamADropzone, teamBDropzone, playerPoolContainer].forEach(zone => {
+            zone.addEventListener('dragover', handleDragOver);
+            zone.addEventListener('dragleave', handleDragLeave);
+            zone.addEventListener('drop', handleDrop);
+        });
+
+        // Rendering functions for game screen
         function createPlayerCard(player) {
             const card = document.createElement('div');
             card.className = 'player-card p-3 border-2 bg-white border-gray-200 rounded-lg flex justify-between items-center';
             card.dataset.playerId = player.id;
             card.draggable = true;
-            card.innerHTML = `<span class="font-medium">${player.name}</span><div class="flex items-center gap-3"><span class="actions"><i class="fas fa-edit text-blue-500 cursor-pointer edit-btn"></i><i class="fas fa-trash-alt text-red-500 cursor-pointer delete-btn ml-2"></i></span><i class="fas fa-grip-vertical text-gray-400"></i></div>`;
+            card.innerHTML = `
+                <span class="font-medium">${player.name}</span>
+                <div class="flex items-center gap-3 actions">
+                    <i class="fas fa-edit text-blue-500 cursor-pointer edit-btn" title="Sửa tên"></i>
+                    <i class="fas fa-trash-alt text-red-500 cursor-pointer delete-btn ml-2" title="Xóa"></i>
+                </div>`;
             card.addEventListener('dragstart', handleDragStart);
             card.addEventListener('dragend', handleDragEnd);
-            card.querySelector('.edit-btn').onclick = (e) => { e.stopPropagation(); handleEditPlayer(player.id, player.name); };
-            card.querySelector('.delete-btn').onclick = (e) => { e.stopPropagation(); handleDeletePlayer(player.id, player.name); };
+            card.querySelector('.edit-btn').addEventListener('click', (e) => handleEditPlayer(player.id, player.name));
+            card.querySelector('.delete-btn').addEventListener('click', (e) => handleDeletePlayer(player.id, player.name));
             return card;
         }
         function renderAvailablePlayers() {
             playerListEl.innerHTML = '';
             const availablePlayers = allPlayers.filter(p => !teamA.includes(p.id) && !teamB.includes(p.id));
-            if (availablePlayers.length === 0 && allPlayers.length > 0) { playerListEl.innerHTML = '<p class="text-gray-400 text-center p-4">Tất cả người chơi đã vào đội.</p>'; }
-            else if (allPlayers.length === 0) { playerListEl.innerHTML = '<p class="text-gray-500">Chưa có người chơi nào.</p>'; }
-            else { availablePlayers.forEach(player => playerListEl.appendChild(createPlayerCard(player))); }
+            if (availablePlayers.length > 0) {
+                availablePlayers.forEach(p => playerListEl.appendChild(createPlayerCard(p)));
+            } else if (allPlayers.length > 0) {
+                playerListEl.innerHTML = '<p class="text-gray-400 text-center p-4">Tất cả đã vào đội.</p>';
+            } else {
+                playerListEl.innerHTML = '<p class="text-gray-500">Chưa có người chơi nào.</p>';
+            }
         }
         function renderTeams() {
-            allUI.teamADropzone.innerHTML = '';
-            allUI.teamBDropzone.innerHTML = '';
-            teamA.forEach(id => { const p = allPlayers.find(pl => pl.id === id); if(p) allUI.teamADropzone.appendChild(createPlayerCard(p)); });
-            teamB.forEach(id => { const p = allPlayers.find(pl => pl.id === id); if(p) allUI.teamBDropzone.appendChild(createPlayerCard(p)); });
+            teamADropzone.innerHTML = '';
+            teamBDropzone.innerHTML = '';
+            teamA.forEach(id => {
+                const p = allPlayers.find(pl => pl.id === id);
+                if (p) teamADropzone.appendChild(createPlayerCard(p));
+            });
+            teamB.forEach(id => {
+                const p = allPlayers.find(pl => pl.id === id);
+                if (p) teamBDropzone.appendChild(createPlayerCard(p));
+            });
         }
         function updateMatchActions() {
-            if (teamA.length === 2 && teamB.length === 2) {
+             if (teamA.length === 2 && teamB.length === 2) {
                 const teamAName = document.getElementById('teamAName').value || 'Đội A';
                 const teamBName = document.getElementById('teamBName').value || 'Đội B';
-                allUI.matchActions.innerHTML = `<div class="flex items-end gap-4 justify-center"><div class="text-center"><label for="scoreA" class="font-semibold text-sm text-blue-800">${teamAName}</label><input type="number" id="scoreA" class="w-20 p-2 text-center text-lg font-bold border-2 rounded-md" min="0"></div><div class="text-gray-400 font-bold text-lg pb-2">-</div><div class="text-center"><label for="scoreB" class="font-semibold text-sm text-green-800">${teamBName}</label><input type="number" id="scoreB" class="w-20 p-2 text-center text-lg font-bold border-2 rounded-md" min="0"></div></div><button id="recordMatchBtn" class="mt-4 w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 px-4 rounded-lg"><i class="fas fa-check-circle mr-2"></i>Ghi Nhận Kết Quả</button>`;
-                document.getElementById('recordMatchBtn').onclick = handleRecordResult;
-            } else { allUI.matchActions.innerHTML = '<p class="text-gray-500">Kéo hoặc nhấn để thêm 2 người vào mỗi đội.</p>'; }
+                matchActionsEl.innerHTML = `
+                    <div class="flex items-end gap-4 justify-center">
+                        <div class="text-center"><label class="font-semibold text-sm">${teamAName}</label><input type="number" id="scoreA" class="w-20 p-2 text-center text-lg font-bold border-2 rounded-md" min="0"></div>
+                        <div class="text-gray-400 font-bold text-lg pb-2">-</div>
+                        <div class="text-center"><label class="font-semibold text-sm">${teamBName}</label><input type="number" id="scoreB" class="w-20 p-2 text-center text-lg font-bold border-2 rounded-md" min="0"></div>
+                    </div>
+                    <button id="recordMatchBtn" class="mt-4 w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 px-4 rounded-lg"><i class="fas fa-check-circle mr-2"></i>Ghi Nhận Kết Quả</button>`;
+                document.getElementById('recordMatchBtn').addEventListener('click', handleRecordResult);
+            } else {
+                matchActionsEl.innerHTML = '<p class="text-gray-500">Kéo đủ 2 người vào mỗi đội.</p>';
+            }
         }
-        let draggedPlayerId = null;
-        function handleDragStart(e) { if (e.target.classList.contains('edit-btn') || e.target.classList.contains('delete-btn')) { e.preventDefault(); return; } draggedPlayerId = e.target.closest('.player-card').dataset.playerId; e.dataTransfer.effectAllowed = 'move'; setTimeout(() => e.target.closest('.player-card').classList.add('dragging'), 0); }
-        function handleDragEnd(e) { const card = document.querySelector(`.player-card[data-player-id='${draggedPlayerId}']`); if (card) card.classList.remove('dragging'); draggedPlayerId = null; }
-        function handleDragOver(e) { e.preventDefault(); const dropzone = e.target.closest('.dropzone'); if (dropzone) dropzone.classList.add('drag-over'); }
-        function handleDragLeave(e) { const dropzone = e.target.closest('.dropzone'); if (dropzone) dropzone.classList.remove('drag-over'); }
-        function handleDrop(e) { e.preventDefault(); const dropzone = e.target.closest('.dropzone'); if (!dropzone || !draggedPlayerId) return; dropzone.classList.remove('drag-over'); teamA = teamA.filter(id => id !== draggedPlayerId); teamB = teamB.filter(id => id !== draggedPlayerId); if (dropzone.id === 'teamADropzone' && teamA.length < 2) { teamA.push(draggedPlayerId); } else if (dropzone.id === 'teamBDropzone' && teamB.length < 2) { teamB.push(draggedPlayerId); } else if (dropzone.id !== 'playerPoolContainer') { showToast("Mỗi đội chỉ có 2 người.", true); } renderAllInSession(); }
-        let targetTeamForModal = null;
-        function setupClickToAddListeners() { allUI.teamADropzone.onclick = () => openPlayerSelectionModal('A'); allUI.teamBDropzone.onclick = () => openPlayerSelectionModal('B'); }
-        function openPlayerSelectionModal(teamId) { targetTeamForModal = teamId; const targetTeamArray = (teamId === 'A') ? teamA : teamB; if (targetTeamArray.length >= 2) { showToast("Đội này đã đủ người.", true); return; } const availablePlayers = allPlayers.filter(p => !teamA.includes(p.id) && !teamB.includes(p.id)); allUI.modalPlayerList.innerHTML = ''; if (availablePlayers.length === 0) { allUI.modalPlayerList.innerHTML = '<p class="text-gray-500 p-4 text-center">Không có người chơi nào.</p>'; } else { availablePlayers.forEach(player => { const item = document.createElement('div'); item.className = 'p-3 hover:bg-gray-100 rounded-md cursor-pointer'; item.textContent = player.name; item.dataset.playerId = player.id; item.onclick = () => selectPlayerFromModal(player.id); allUI.modalPlayerList.appendChild(item); }); } allUI.playerSelectModal.classList.remove('hidden'); }
-        function selectPlayerFromModal(playerId) { if (targetTeamForModal === 'A' && teamA.length < 2) { teamA.push(playerId); } else if (targetTeamForModal === 'B' && teamB.length < 2) { teamB.push(playerId); } allUI.playerSelectModal.classList.add('hidden'); renderAllInSession(); }
-        async function handleEditPlayer(playerId, currentName) { const newName = prompt("Sửa tên người chơi:", currentName); if (newName && newName.trim() && newName.trim() !== currentName) { try { await updateDoc(doc(db, `sessions/${currentSessionId}/players`, playerId), { name: newName.trim() }); showToast("Đã cập nhật tên."); } catch (e) { console.error(e); showToast("Lỗi cập nhật.", true); } } }
-        async function handleDeletePlayer(playerId, playerName) { if (confirm(`Bạn có chắc muốn xóa "${playerName}"?`)) { try { await deleteDoc(doc(db, `sessions/${currentSessionId}/players`, playerId)); teamA = teamA.filter(id => id !== playerId); teamB = teamB.filter(id => id !== playerId); renderAllInSession(); showToast(`Đã xóa "${playerName}".`); } catch (e) { console.error(e); showToast("Lỗi khi xóa.", true); } } }
-        function renderMatchHistory() { matchHistoryBody.innerHTML = ''; if (matches.length === 0) { matchHistoryBody.innerHTML = '<tr><td colspan="3" class="text-center py-4 text-gray-500">Chưa có trận đấu nào.</td></tr>'; return; } matches.forEach(match => { const row = document.createElement('tr'); row.innerHTML = `<td class="px-4 py-4"><div class="font-bold text-green-600">${match.winningTeam.name}</div><div class="text-sm text-gray-500">${match.winningTeam.players.join(' & ')}</div></td><td class="px-4 py-4"><div class="font-bold text-red-600">${match.losingTeam.name}</div><div class="text-sm text-gray-500">${match.losingTeam.players.join(' & ')}</div></td><td class="px-4 py-4 text-center"><span class="text-lg font-bold">${match.score}</span></td>`; matchHistoryBody.appendChild(row); }); }
-        function updateSummary() { summaryTableBody.innerHTML = ''; if (allPlayers.length === 0) { summaryTableBody.innerHTML = '<tr><td colspan="3" class="text-center py-4 text-gray-500">Chưa có dữ liệu.</td></tr>'; return; } const summary = allPlayers.map(player => { const losses = matches.reduce((count, match) => count + (match.losers.includes(player.id) ? 1 : 0), 0); return { ...player, losses, due: losses * LOSER_FEE }; }); summary.forEach(player => { const row = document.createElement('tr'); row.innerHTML = `<td class="px-6 py-4"><div class="text-sm font-medium">${player.name}</div></td><td class="px-6 py-4 text-center"><span class="text-sm font-semibold ${player.losses > 0 ? 'text-red-600' : 'text-green-600'}">${player.losses}</span></td><td class="px-6 py-4 text-right"><span class="text-sm font-semibold">${player.due.toLocaleString('vi-VN')}</span></td>`; summaryTableBody.appendChild(row); }); }
-        function exportSummaryImage() { allUI.imageModal.classList.remove('hidden'); allUI.resultImage.classList.add('hidden'); allUI.downloadImageBtn.classList.add('hidden'); allUI.imageLoadingText.classList.remove('hidden'); html2canvas(document.getElementById('summarySection'), { scale: 2, useCORS: true, backgroundColor: '#f3f4f6' }).then(canvas => { const url = canvas.toDataURL('image/png'); allUI.resultImage.src = url; allUI.downloadImageBtn.href = url; allUI.resultImage.classList.remove('hidden'); allUI.downloadImageBtn.classList.remove('hidden'); allUI.imageLoadingText.classList.add('hidden'); }).catch(err => { console.error("Lỗi tạo ảnh:", err); allUI.imageLoadingText.textContent = "Lỗi khi tạo ảnh."; }); }
-        function showToast(message, isError = false) { const toast = document.getElementById('toast'); toast.textContent = message; toast.className = 'show'; toast.style.backgroundColor = isError ? '#EF4444' : '#22C55E'; setTimeout(() => { toast.className = toast.className.replace('show', ''); }, 3000); }
+        function renderSummaryAndHistory() {
+            summarySection.innerHTML = generateSummaryHTML(allPlayers, matches, false);
+        }
+        function generateSummaryHTML(players, gameMatches, isReadOnly) {
+            const summaryData = players.map(player => {
+                const losses = gameMatches.reduce((count, match) => count + (match.losers.includes(player.id) ? 1 : 0), 0);
+                return { ...player, losses, due: losses * LOSER_FEE };
+            });
+            
+            const historyRows = gameMatches.map(match => `
+                <tr>
+                    <td class="px-4 py-4"><div class="font-bold text-green-600">${match.winningTeam.name}</div><div class="text-sm text-gray-500">${match.winningTeam.players.join(' & ')}</div></td>
+                    <td class="px-4 py-4"><div class="font-bold text-red-600">${match.losingTeam.name}</div><div class="text-sm text-gray-500">${match.losingTeam.players.join(' & ')}</div></td>
+                    <td class="px-4 py-4 text-center"><span class="text-lg font-bold text-gray-800">${match.score}</span></td>
+                </tr>`).join('');
+
+            const summaryRows = summaryData.map(player => `
+                <tr>
+                    <td class="px-6 py-4 whitespace-nowrap"><div class="text-sm font-medium text-gray-900">${player.name}</div></td>
+                    <td class="px-6 py-4 whitespace-nowrap text-center"><span class="text-sm font-semibold ${player.losses > 0 ? 'text-red-600' : 'text-green-600'}">${player.losses}</span></td>
+                    <td class="px-6 py-4 whitespace-nowrap text-right"><span class="text-sm font-semibold text-gray-800">${player.due.toLocaleString('vi-VN')}</span></td>
+                </tr>`).join('');
+
+            return `
+                <div class="bg-white p-6 rounded-xl shadow-md mt-8">
+                    <h2 class="text-xl font-bold mb-4"><i class="fas fa-history mr-2"></i>Lịch sử trận đấu</h2>
+                    <div class="overflow-x-auto"><table class="min-w-full divide-y divide-gray-200"><thead class="bg-gray-50"><tr><th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Thắng</th><th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Thua</th><th class="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase">Tỷ số</th></tr></thead><tbody class="bg-white divide-y divide-gray-200">${historyRows || '<tr><td colspan="3" class="text-center py-4 text-gray-500">Chưa có trận đấu nào.</td></tr>'}</tbody></table></div>
+                </div>
+                <div class="bg-white p-6 rounded-xl shadow-md mt-8">
+                    <h2 class="text-xl font-bold mb-4"><i class="fas fa-chart-line mr-2"></i>Bảng tổng kết tiền phạt</h2>
+                    <div class="overflow-x-auto"><table class="min-w-full divide-y divide-gray-200"><thead class="bg-gray-50"><tr><th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Người chơi</th><th class="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase">Số trận thua</th><th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">Tiền phạt (VND)</th></tr></thead><tbody class="bg-white divide-y divide-gray-200">${summaryRows || '<tr><td colspan="3" class="text-center py-4 text-gray-500">Chưa có dữ liệu.</td></tr>'}</tbody></table></div>
+                </div>
+            `;
+        }
+        
+        // Handlers
+        async function handleRecordResult() {
+            const scoreA = parseInt(document.getElementById('scoreA').value, 10);
+            const scoreB = parseInt(document.getElementById('scoreB').value, 10);
+            if (isNaN(scoreA) || isNaN(scoreB) || scoreA === scoreB) {
+                showToast("Vui lòng nhập tỷ số hợp lệ và không bằng nhau.", true); return;
+            }
+            const getPlayerNames = (idArray) => idArray.map(id => allPlayers.find(p => p.id === id)?.name || 'N/A');
+            const matchData = {
+                createdAt: new Date(),
+                winners: scoreA > scoreB ? teamA : teamB,
+                losers: scoreA < scoreB ? teamA : teamB,
+                winningTeam: { name: scoreA > scoreB ? document.getElementById('teamAName').value : document.getElementById('teamBName').value, players: getPlayerNames(scoreA > scoreB ? teamA : teamB) },
+                losingTeam: { name: scoreA < scoreB ? document.getElementById('teamAName').value : document.getElementById('teamBName').value, players: getPlayerNames(scoreA < scoreB ? teamA : teamB) },
+                score: `${Math.max(scoreA, scoreB)} - ${Math.min(scoreA, scoreB)}`
+            };
+            try {
+                await addDoc(collection(db, getMatchesCollectionPath(currentRoomId)), matchData);
+                showToast(`Đã ghi nhận trận đấu.`);
+                teamA = []; teamB = [];
+                renderAllGameUI();
+            } catch (error) { showToast("Lỗi khi ghi nhận trận đấu", true); }
+        }
+        async function handleEditPlayer(id, name) {
+            const newName = prompt("Chỉnh sửa tên:", name);
+            if (newName && newName.trim() !== name) {
+                await updateDoc(doc(db, getPlayersCollectionPath(currentRoomId), id), { name: newName.trim() });
+            }
+        }
+        async function handleDeletePlayer(id, name) {
+            if (confirm(`Bạn có chắc muốn xóa "${name}"?`)) {
+                await deleteDoc(doc(db, getPlayersCollectionPath(currentRoomId), id));
+            }
+        }
+        exportImageBtn.addEventListener('click', () => {
+             html2canvas(summarySection, { scale: 2, useCORS: true, backgroundColor: '#f9fafb' }).then(canvas => {
+                const imageUrl = canvas.toDataURL('image/png');
+                imageModal.innerHTML = `
+                    <div class="relative mx-auto p-5 border w-11/12 max-w-lg shadow-lg rounded-md bg-white">
+                        <h3 class="text-lg font-medium text-gray-900 text-center">Ảnh Tổng Kết</h3>
+                        <div class="mt-4"><img src="${imageUrl}" class="max-w-full h-auto" /></div>
+                        <div class="items-center px-4 py-3 gap-3 flex justify-center mt-2">
+                            <a href="${imageUrl}" download="tong-ket-pickleball.png" class="px-4 py-2 bg-blue-500 text-white rounded-md">Tải Về</a>
+                            <button id="closeImgModalBtn" class="px-4 py-2 bg-gray-200 rounded-md">Đóng</button>
+                        </div>
+                    </div>`;
+                imageModal.classList.remove('hidden');
+                document.getElementById('closeImgModalBtn').addEventListener('click', () => imageModal.classList.add('hidden'));
+            });
+        });
+
+        // --- Utility ---
+        function showToast(message, isError = false) {
+            const toast = document.getElementById('toast');
+            toast.textContent = message;
+            toast.className = 'show';
+            toast.style.backgroundColor = isError ? '#EF4444' : '#22C55E';
+            setTimeout(() => { toast.className = toast.className.replace('show', ''); }, 3000);
+        }
+
+        // --- Start the app ---
+        initializeAppLogic();
 
     </script>
 </body>
