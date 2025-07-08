@@ -3,15 +3,18 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Quản lý Quỹ Pickleball (Kéo-Thả)</title>
+    <title>Quản lý Quỹ Pickleball (Mobile-Friendly)</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link href="https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:wght@400;500;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <!-- Thư viện để chụp ảnh màn hình D.O.M -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+    <!-- Thư viện hỗ trợ kéo-thả trên thiết bị cảm ứng -->
+    <script src="https://cdn.jsdelivr.net/npm/drag-drop-touch@1.3.1/DragDropTouch.js"></script>
     <style>
         body {
             font-family: 'Be Vietnam Pro', sans-serif;
+            -webkit-tap-highlight-color: transparent; /* Tắt hiệu ứng highlight khi nhấn trên mobile */
         }
         .player-card {
             transition: all 0.2s ease-in-out;
@@ -28,7 +31,7 @@
             opacity: 0;
             transition: opacity 0.2s ease-in-out;
         }
-        .player-card:hover .actions {
+        .player-card:hover .actions, .player-card.touch-hover .actions {
             opacity: 1;
         }
         .dropzone {
@@ -39,6 +42,9 @@
             background-color: #e0f2fe; /* light-blue-100 */
             border-style: solid;
             border-color: #3b82f6; /* blue-500 */
+        }
+        .team-dropzone {
+            cursor: pointer;
         }
         #toast {
             visibility: hidden;
@@ -60,12 +66,6 @@
             visibility: visible;
             opacity: 1;
         }
-        /* For screenshot styling */
-        #screenshotContainer {
-            background: white;
-            padding: 20px;
-            font-family: 'Be Vietnam Pro', sans-serif;
-        }
     </style>
 </head>
 <body class="bg-gray-50 text-gray-800">
@@ -76,7 +76,7 @@
             <h1 class="text-3xl md:text-4xl font-bold text-blue-600">
                 <i class="fas fa-pickleball" style="color: #22c55e;"></i> Quản lý Quỹ Pickleball
             </h1>
-            <p class="text-gray-500 mt-2">Kéo thả người chơi, nhập tỷ số và theo dõi lịch sử trận đấu.</p>
+            <p class="text-gray-500 mt-2">Kéo thả hoặc nhấn để chọn đội, nhập tỷ số và theo dõi lịch sử.</p>
              <div class="mt-2 text-xs text-gray-400">
                 <p>User ID: <span id="userIdDisplay">Đang tải...</span></p>
                 <p>(Chia sẻ ID này để mời bạn bè vào cùng phòng)</p>
@@ -119,13 +119,12 @@
                     </div>
                 </div>
                  <div id="matchActions" class="mt-6 text-center">
-                    <p class="text-gray-500">Vui lòng kéo đủ 2 người vào mỗi đội để bắt đầu.</p>
+                    <p class="text-gray-500">Vui lòng kéo hoặc nhấn để thêm 2 người vào mỗi đội.</p>
                 </div>
             </div>
         </main>
 
         <div id="summarySection">
-            <!-- Match History Table -->
             <div id="historyContainer" class="bg-white p-6 rounded-xl shadow-md mt-8">
                 <h2 class="text-xl font-bold mb-4"><i class="fas fa-history mr-2"></i>Lịch sử trận đấu</h2>
                 <div class="overflow-x-auto">
@@ -142,7 +141,6 @@
                 </div>
             </div>
 
-            <!-- Summary Table -->
             <div id="finesContainer" class="bg-white p-6 rounded-xl shadow-md mt-8">
                 <h2 class="text-xl font-bold mb-4"><i class="fas fa-chart-line mr-2"></i>Bảng tổng kết tiền phạt</h2>
                 <div class="overflow-x-auto">
@@ -168,7 +166,21 @@
                 <i class="fas fa-sync-alt mr-2"></i>Reset Buổi Chơi
             </button>
         </div>
-
+    </div>
+    
+    <!-- Modal for Player Selection -->
+    <div id="playerSelectModal" class="fixed inset-0 bg-gray-600 bg-opacity-75 overflow-y-auto h-full w-full hidden z-50 flex items-center justify-center p-4">
+        <div class="relative mx-auto p-5 border w-full max-w-sm shadow-lg rounded-md bg-white">
+             <div class="flex justify-between items-center border-b pb-3 mb-3">
+                <h3 class="text-lg leading-6 font-medium text-gray-900">Chọn người chơi</h3>
+                <button id="closePlayerSelectModalBtn" class="text-gray-400 hover:text-gray-600">
+                    <i class="fas fa-times fa-lg"></i>
+                </button>
+            </div>
+            <div id="modalPlayerList" class="space-y-2 max-h-64 overflow-y-auto">
+                <!-- Player list will be injected here -->
+            </div>
+        </div>
     </div>
 
     <!-- Modal for Image Export -->
@@ -184,7 +196,7 @@
                     <a id="downloadImageBtn" href="#" download="tong-ket-pickleball.png" class="w-full sm:w-auto px-4 py-2 bg-blue-500 text-white text-base font-medium rounded-md shadow-sm hover:bg-blue-600 focus:outline-none focus:ring-2 focus:ring-blue-300 hidden">
                         <i class="fas fa-download mr-2"></i>Tải Ảnh Về
                     </a>
-                    <button id="closeModalBtn" class="w-full sm:w-auto mt-2 sm:mt-0 px-4 py-2 bg-gray-200 text-gray-800 text-base font-medium rounded-md shadow-sm hover:bg-gray-300 focus:outline-none focus:ring-2 focus:ring-gray-300">
+                    <button id="closeImageModalBtn" class="w-full sm:w-auto mt-2 sm:mt-0 px-4 py-2 bg-gray-200 text-gray-800 text-base font-medium rounded-md shadow-sm hover:bg-gray-300 focus:outline-none focus:ring-2 focus:ring-gray-300">
                         Đóng
                     </button>
                 </div>
@@ -199,18 +211,16 @@
         import { getAuth, signInAnonymously, onAuthStateChanged, signInWithCustomToken } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
         import { getFirestore, collection, doc, addDoc, onSnapshot, query, writeBatch, getDocs, deleteDoc, updateDoc, orderBy } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 
-        // --- START: Firebase Config ---
-        // DÁN FIREBASE CONFIG CỦA BẠN VÀO ĐÂY
+        // Cấu hình Firebase của bạn đã được thêm vào đây
         const firebaseConfig = {
-  apiKey: "AIzaSyDRvpyEc0oVdBESigc5NoOlb_jFO9tLMwY",
-  authDomain: "pickbudget-df336.firebaseapp.com",
-  projectId: "pickbudget-df336",
-  storageBucket: "pickbudget-df336.firebasestorage.app",
-  messagingSenderId: "1007097338414",
-  appId: "1:1007097338414:web:82c65a5ae6784c83555dbf",
-  measurementId: "G-BEGDMV8RD7"
-};
-        // --- END: Firebase Config ---
+          apiKey: "AIzaSyDRvpyEc0oVdBESigc5NoOlb_jFO9tLMwY",
+          authDomain: "pickbudget-df336.firebaseapp.com",
+          projectId: "pickbudget-df336",
+          storageBucket: "pickbudget-df336.appspot.com",
+          messagingSenderId: "1007097338414",
+          appId: "1:1007097338414:web:82c65a5ae6784c83555dbf",
+          measurementId: "G-BEGDMV8RD7"
+        };
 
         const appId = typeof __app_id !== 'undefined' ? __app_id : 'pickleball-default';
         const LOSER_FEE = 25000;
@@ -238,11 +248,17 @@
         const matchHistoryBody = document.getElementById('matchHistoryBody');
         const exportImageBtn = document.getElementById('exportImageBtn');
         const resetSessionBtn = document.getElementById('resetSessionBtn');
+        
         const imageModal = document.getElementById('imageModal');
-        const closeModalBtn = document.getElementById('closeModalBtn');
+        const closeImageModalBtn = document.getElementById('closeImageModalBtn');
         const downloadImageBtn = document.getElementById('downloadImageBtn');
         const resultImage = document.getElementById('resultImage');
         const imageLoadingText = document.getElementById('imageLoadingText');
+        
+        const playerSelectModal = document.getElementById('playerSelectModal');
+        const modalPlayerList = document.getElementById('modalPlayerList');
+        const closePlayerSelectModalBtn = document.getElementById('closePlayerSelectModalBtn');
+
         const userIdDisplay = document.getElementById('userIdDisplay');
         const teamADropzone = document.getElementById('teamADropzone');
         const teamBDropzone = document.getElementById('teamBDropzone');
@@ -320,6 +336,7 @@
             renderAvailablePlayers();
             renderTeams();
             updateMatchActions();
+            setupClickToAddListeners();
         }
         
         function renderAvailablePlayers() {
@@ -372,7 +389,7 @@
                 `;
                 document.getElementById('recordMatchBtn').addEventListener('click', handleRecordResult);
             } else {
-                matchActionsEl.innerHTML = '<p class="text-gray-500">Vui lòng kéo đủ 2 người vào mỗi đội để bắt đầu.</p>';
+                matchActionsEl.innerHTML = '<p class="text-gray-500">Vui lòng kéo hoặc nhấn để thêm 2 người vào mỗi đội.</p>';
             }
         }
 
@@ -432,6 +449,53 @@
             zone.addEventListener('drop', handleDrop);
         });
         
+        // --- NEW: Click-to-Add Player Logic ---
+        let targetTeamForModal = null;
+
+        function setupClickToAddListeners() {
+            teamADropzone.onclick = () => openPlayerSelectionModal('A');
+            teamBDropzone.onclick = () => openPlayerSelectionModal('B');
+            closePlayerSelectModalBtn.onclick = () => playerSelectModal.classList.add('hidden');
+        }
+
+        function openPlayerSelectionModal(teamId) {
+            targetTeamForModal = teamId;
+            const targetTeamArray = (teamId === 'A') ? teamA : teamB;
+
+            if (targetTeamArray.length >= 2) {
+                showToast("Đội này đã đủ người.", true);
+                return;
+            }
+
+            const availablePlayers = allPlayers.filter(p => !teamA.includes(p.id) && !teamB.includes(p.id));
+            modalPlayerList.innerHTML = '';
+
+            if (availablePlayers.length === 0) {
+                modalPlayerList.innerHTML = '<p class="text-gray-500 p-4 text-center">Không có người chơi nào sẵn sàng.</p>';
+            } else {
+                availablePlayers.forEach(player => {
+                    const playerItem = document.createElement('div');
+                    playerItem.className = 'p-3 hover:bg-gray-100 rounded-md cursor-pointer';
+                    playerItem.textContent = player.name;
+                    playerItem.dataset.playerId = player.id;
+                    playerItem.onclick = () => selectPlayerFromModal(player.id);
+                    modalPlayerList.appendChild(playerItem);
+                });
+            }
+            playerSelectModal.classList.remove('hidden');
+        }
+
+        function selectPlayerFromModal(playerId) {
+            if (targetTeamForModal === 'A' && teamA.length < 2) {
+                teamA.push(playerId);
+            } else if (targetTeamForModal === 'B' && teamB.length < 2) {
+                teamB.push(playerId);
+            }
+            playerSelectModal.classList.add('hidden');
+            renderAll();
+        }
+        // --- END: Click-to-Add Player Logic ---
+
         async function handleRecordResult() {
             const scoreAEl = document.getElementById('scoreA');
             const scoreBEl = document.getElementById('scoreB');
@@ -608,9 +672,9 @@
             const summarySection = document.getElementById('summarySection');
             
             html2canvas(summarySection, { 
-                scale: 2, // Tăng chất lượng ảnh
+                scale: 2,
                 useCORS: true,
-                backgroundColor: '#f9fafb' // Màu nền của body
+                backgroundColor: '#f9fafb'
             }).then(canvas => {
                 const imageUrl = canvas.toDataURL('image/png');
                 resultImage.src = imageUrl;
@@ -625,7 +689,7 @@
             });
         });
 
-        closeModalBtn.addEventListener('click', () => imageModal.classList.add('hidden'));
+        closeImageModalBtn.addEventListener('click', () => imageModal.classList.add('hidden'));
 
         function showToast(message, isError = false) {
             const toast = document.getElementById('toast');
