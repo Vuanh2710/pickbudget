@@ -15,12 +15,12 @@
         .player-card.dragging { opacity: 0.5; transform: scale(1.05); }
         .player-card .actions { opacity: 0; transition: opacity 0.2s ease-in-out; }
         .player-card:hover .actions { opacity: 1; }
-        .dropzone { transition: all 0.2s ease-in-out; border-style: dashed; }
+        .dropzone { transition: all 0.2s ease-in-out; border-style: dashed; cursor: pointer; }
         .dropzone.drag-over { background-color: #e0f2fe; border-style: solid; border-color: #3b82f6; }
         #toast { visibility: hidden; min-width: 250px; margin-left: -125px; background-color: #333; color: #fff; text-align: center; border-radius: 8px; padding: 16px; position: fixed; z-index: 1000; left: 50%; bottom: 30px; transition: visibility 0.5s, opacity 0.5s linear; opacity: 0; }
         #toast.show { visibility: visible; opacity: 1; }
         .modal { transition: opacity 0.3s ease; }
-        .history-item { transition: background-color: 0.2s; }
+        .history-item { transition: background-color 0.2s; }
         .history-item:hover { background-color: #f3f4f6; }
     </style>
 </head>
@@ -149,6 +149,18 @@
     </div>
 
     <!-- Modals -->
+    <div id="playerSelectModal" class="modal fixed inset-0 bg-gray-800 bg-opacity-75 h-full w-full hidden z-50 flex items-center justify-center p-4">
+         <div class="relative mx-auto p-6 border w-full max-w-md shadow-lg rounded-xl bg-white">
+            <h3 id="playerSelectModalTitle" class="text-xl leading-6 font-bold text-gray-900 mb-4">Chọn người chơi</h3>
+            <div id="modalPlayerList" class="space-y-3 max-h-64 overflow-y-auto mb-6">
+                <!-- Player list will be populated here -->
+            </div>
+            <div class="flex justify-end gap-4">
+                <button id="closePlayerSelectModalBtn" class="px-4 py-2 bg-gray-200 text-gray-800 rounded-md hover:bg-gray-300">Hủy</button>
+                <button id="saveTeamSelectionBtn" class="px-4 py-2 bg-blue-500 text-white rounded-md hover:bg-blue-600">Lưu</button>
+            </div>
+        </div>
+    </div>
     <div id="imageModal" class="modal fixed inset-0 bg-gray-600 bg-opacity-75 h-full w-full hidden z-50 flex items-center justify-center"></div>
     <div id="historyDetailModal" class="modal fixed inset-0 bg-gray-600 bg-opacity-75 h-full w-full hidden z-50 flex items-center justify-center p-4"></div>
     <div id="toast"></div>
@@ -173,6 +185,7 @@
         let currentRoomId = null;
         let allPlayers = [], matches = [], teamA = [], teamB = [];
         let unsubscribePlayers, unsubscribeMatches, unsubscribeRoom;
+        let teamSelectionTarget = null;
 
         const appId = typeof __app_id !== 'undefined' ? __app_id : 'pickleball-default-public';
         const getRoomsCollectionPath = () => `artifacts/${appId}/public/data/pickleball_rooms`;
@@ -213,6 +226,12 @@
         const backToLobbyBtn = document.getElementById('backToLobbyBtn');
         const exportImageBtn = document.getElementById('exportImageBtn');
         const endGameBtn = document.getElementById('endGameBtn');
+        // Modals
+        const playerSelectModal = document.getElementById('playerSelectModal');
+        const playerSelectModalTitle = document.getElementById('playerSelectModalTitle');
+        const modalPlayerList = document.getElementById('modalPlayerList');
+        const closePlayerSelectModalBtn = document.getElementById('closePlayerSelectModalBtn');
+        const saveTeamSelectionBtn = document.getElementById('saveTeamSelectionBtn');
         const imageModal = document.getElementById('imageModal');
         const historyDetailModal = document.getElementById('historyDetailModal');
 
@@ -272,7 +291,6 @@
                 return;
             }
 
-            // Add self to participants list
             await addSelfToParticipants(roomId);
             
             const roomData = roomDoc.data();
@@ -533,6 +551,7 @@
             } catch (e) { showToast("Lỗi khi thêm khách.", true); }
         });
         
+        // --- Team Selection Logic (Click and Drag&Drop) ---
         let draggedPlayerId = null;
         function handleDragStart(e) {
             draggedPlayerId = e.target.closest('.player-card').dataset.playerId;
@@ -549,13 +568,71 @@
             e.preventDefault();
             const dropzone = e.target.closest('.dropzone');
             if (!dropzone || !draggedPlayerId) return;
-            dropzone.classList.remove('drag-over');
+
+            const targetTeam = dropzone.dataset.team;
+            if (!targetTeam) return; // Dropped on player pool
+
+            // Remove from both teams first
             teamA = teamA.filter(id => id !== draggedPlayerId);
             teamB = teamB.filter(id => id !== draggedPlayerId);
-            if (dropzone.id === 'teamADropzone' && teamA.length < 2) teamA.push(draggedPlayerId);
-            else if (dropzone.id === 'teamBDropzone' && teamB.length < 2) teamB.push(draggedPlayerId);
+
+            // Add to the target team if not full
+            if (targetTeam === 'A' && teamA.length < 2) {
+                teamA.push(draggedPlayerId);
+            } else if (targetTeam === 'B' && teamB.length < 2) {
+                teamB.push(draggedPlayerId);
+            }
+
             renderAllGameUI();
         }
+        
+        function openPlayerSelectionModal(team) {
+            teamSelectionTarget = team;
+            playerSelectModalTitle.textContent = `Chọn người chơi cho Đội ${team}`;
+            
+            const otherTeam = team === 'A' ? teamB : teamA;
+            const availablePlayers = allPlayers.filter(p => !otherTeam.includes(p.id));
+            const currentTeam = team === 'A' ? teamA : teamB;
+
+            modalPlayerList.innerHTML = '';
+            availablePlayers.forEach(player => {
+                const isChecked = currentTeam.includes(player.id);
+                const playerEl = document.createElement('label');
+                playerEl.className = 'flex items-center p-2 rounded-md hover:bg-gray-100 cursor-pointer';
+                playerEl.innerHTML = `
+                    <input type="checkbox" data-player-id="${player.id}" class="h-5 w-5 rounded text-blue-600 focus:ring-blue-500" ${isChecked ? 'checked' : ''}>
+                    <span class="ml-3 font-medium">${player.name}</span>
+                `;
+                modalPlayerList.appendChild(playerEl);
+            });
+
+            playerSelectModal.classList.remove('hidden');
+        }
+
+        function handleSaveTeamSelection() {
+            const selectedCheckboxes = modalPlayerList.querySelectorAll('input[type="checkbox"]:checked');
+            if (selectedCheckboxes.length > 2) {
+                showToast("Mỗi đội chỉ có thể có tối đa 2 người.", true);
+                return;
+            }
+
+            const selectedIds = Array.from(selectedCheckboxes).map(cb => cb.dataset.playerId);
+
+            if (teamSelectionTarget === 'A') {
+                teamA = selectedIds;
+            } else {
+                teamB = selectedIds;
+            }
+
+            playerSelectModal.classList.add('hidden');
+            renderAllGameUI();
+        }
+
+        teamADropzone.addEventListener('click', (e) => { if (e.target === teamADropzone) openPlayerSelectionModal('A'); });
+        teamBDropzone.addEventListener('click', (e) => { if (e.target === teamBDropzone) openPlayerSelectionModal('B'); });
+        closePlayerSelectModalBtn.addEventListener('click', () => playerSelectModal.classList.add('hidden'));
+        saveTeamSelectionBtn.addEventListener('click', handleSaveTeamSelection);
+        
         [teamADropzone, teamBDropzone, playerPoolContainer].forEach(zone => {
             zone.addEventListener('dragover', handleDragOver);
             zone.addEventListener('dragleave', handleDragLeave);
@@ -569,12 +646,12 @@
             card.draggable = true;
             const isHost = player.id === authUser.uid;
             card.innerHTML = `
-                <div class="flex items-center gap-2">
+                <div class="flex items-center gap-2 pointer-events-none">
                     ${player.isGuest ? '<i class="fas fa-user-tag text-gray-400" title="Khách"></i>' : `<img src="${player.photoURL}" class="w-6 h-6 rounded-full">`}
                     <span class="font-medium">${player.name}</span>
                 </div>
                 <div class="flex items-center gap-3 actions">
-                    ${!player.isGuest && isHost ? '' : `<i class="fas fa-trash-alt text-red-500 cursor-pointer delete-btn ml-2" title="Xóa"></i>`}
+                    ${(player.isGuest && authUser.uid === (allPlayers.find(p => p.id === player.id)?.hostId || currentRoomId)) || !player.isGuest ? `<i class="fas fa-trash-alt text-red-500 cursor-pointer delete-btn ml-2" title="Xóa"></i>` : ''}
                 </div>`;
             card.addEventListener('dragstart', handleDragStart);
             card.addEventListener('dragend', handleDragEnd);
@@ -630,7 +707,7 @@
                 `;
                 document.getElementById('recordMatchBtn').addEventListener('click', handleRecordResult);
             } else {
-                matchActionsEl.innerHTML = '<p class="text-gray-500">Kéo đủ 2 người vào mỗi đội.</p>';
+                matchActionsEl.innerHTML = '<p class="text-gray-500">Kéo hoặc nhấn để chọn đủ 2 người vào mỗi đội.</p>';
             }
         }
         
