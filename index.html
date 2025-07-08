@@ -1,0 +1,639 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Quản lý Quỹ Pickleball (Kéo-Thả)</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:wght@400;500;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <!-- Thư viện để chụp ảnh màn hình D.O.M -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+    <style>
+        body {
+            font-family: 'Be Vietnam Pro', sans-serif;
+        }
+        .player-card {
+            transition: all 0.2s ease-in-out;
+            cursor: grab;
+        }
+        .player-card:active {
+            cursor: grabbing;
+        }
+        .player-card.dragging {
+            opacity: 0.5;
+            transform: scale(1.05);
+        }
+        .player-card .actions {
+            opacity: 0;
+            transition: opacity 0.2s ease-in-out;
+        }
+        .player-card:hover .actions {
+            opacity: 1;
+        }
+        .dropzone {
+            transition: all 0.2s ease-in-out;
+            border-style: dashed;
+        }
+        .dropzone.drag-over {
+            background-color: #e0f2fe; /* light-blue-100 */
+            border-style: solid;
+            border-color: #3b82f6; /* blue-500 */
+        }
+        #toast {
+            visibility: hidden;
+            min-width: 250px;
+            margin-left: -125px;
+            background-color: #333;
+            color: #fff;
+            text-align: center;
+            border-radius: 8px;
+            padding: 16px;
+            position: fixed;
+            z-index: 1000;
+            left: 50%;
+            bottom: 30px;
+            transition: visibility 0.5s, opacity 0.5s linear;
+            opacity: 0;
+        }
+        #toast.show {
+            visibility: visible;
+            opacity: 1;
+        }
+        /* For screenshot styling */
+        #screenshotContainer {
+            background: white;
+            padding: 20px;
+            font-family: 'Be Vietnam Pro', sans-serif;
+        }
+    </style>
+</head>
+<body class="bg-gray-50 text-gray-800">
+
+    <div id="app" class="container mx-auto p-4 md:p-6 max-w-5xl">
+        
+        <header class="text-center mb-8">
+            <h1 class="text-3xl md:text-4xl font-bold text-blue-600">
+                <i class="fas fa-pickleball" style="color: #22c55e;"></i> Quản lý Quỹ Pickleball
+            </h1>
+            <p class="text-gray-500 mt-2">Kéo thả người chơi, nhập tỷ số và theo dõi lịch sử trận đấu.</p>
+             <div class="mt-2 text-xs text-gray-400">
+                <p>User ID: <span id="userIdDisplay">Đang tải...</span></p>
+                <p>(Chia sẻ ID này để mời bạn bè vào cùng phòng)</p>
+            </div>
+        </header>
+
+        <!-- Player Management -->
+        <div class="bg-white p-6 rounded-xl shadow-md mb-8">
+            <h2 class="text-xl font-bold mb-4 border-b pb-2">
+                <i class="fas fa-users mr-2"></i>Quản lý người chơi
+            </h2>
+            <div class="flex flex-col sm:flex-row gap-4">
+                <input type="text" id="newPlayerName" class="flex-grow p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent" placeholder="Nhập tên, có thể thêm nhiều người bằng dấu phẩy...">
+                <button id="addPlayerBtn" class="bg-blue-500 hover:bg-blue-600 text-white font-bold py-3 px-6 rounded-lg transition duration-300">
+                    <i class="fas fa-plus mr-2"></i>Thêm
+                </button>
+            </div>
+        </div>
+
+        <!-- Main Content: Player & Match Management -->
+        <main class="grid grid-cols-1 md:grid-cols-3 gap-8">
+            
+            <div id="playerPoolContainer" class="md:col-span-1 bg-white p-6 rounded-xl shadow-md dropzone">
+                <h3 class="text-lg font-bold mb-4">Người chơi sẵn sàng</h3>
+                <div id="playerList" class="space-y-3 min-h-[150px]">
+                    <p class="text-gray-500">Chưa có người chơi nào. Hãy thêm ở trên.</p>
+                </div>
+            </div>
+
+            <div class="md:col-span-2 bg-white p-6 rounded-xl shadow-md">
+                <h3 class="text-lg font-bold mb-4">Thiết lập trận đấu</h3>
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-6">
+                    <div>
+                        <input type="text" id="teamAName" value="Đội A" class="w-full p-2 border-b-2 border-blue-200 focus:border-blue-500 outline-none mb-2 font-bold text-blue-800 bg-blue-50 rounded-t-lg text-center">
+                        <div id="teamADropzone" data-team="A" class="team-dropzone dropzone p-4 bg-blue-50 rounded-b-lg min-h-[120px] border-2 border-blue-300 space-y-3"></div>
+                    </div>
+                    <div>
+                         <input type="text" id="teamBName" value="Đội B" class="w-full p-2 border-b-2 border-green-200 focus:border-green-500 outline-none mb-2 font-bold text-green-800 bg-green-50 rounded-t-lg text-center">
+                        <div id="teamBDropzone" data-team="B" class="team-dropzone dropzone p-4 bg-green-50 rounded-b-lg min-h-[120px] border-2 border-green-300 space-y-3"></div>
+                    </div>
+                </div>
+                 <div id="matchActions" class="mt-6 text-center">
+                    <p class="text-gray-500">Vui lòng kéo đủ 2 người vào mỗi đội để bắt đầu.</p>
+                </div>
+            </div>
+        </main>
+
+        <div id="summarySection">
+            <!-- Match History Table -->
+            <div id="historyContainer" class="bg-white p-6 rounded-xl shadow-md mt-8">
+                <h2 class="text-xl font-bold mb-4"><i class="fas fa-history mr-2"></i>Lịch sử trận đấu</h2>
+                <div class="overflow-x-auto">
+                    <table class="min-w-full divide-y divide-gray-200">
+                        <thead class="bg-gray-50">
+                            <tr>
+                                <th scope="col" class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Đội Thắng</th>
+                                <th scope="col" class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Đội Thua</th>
+                                <th scope="col" class="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Tỷ số</th>
+                            </tr>
+                        </thead>
+                        <tbody id="matchHistoryBody" class="bg-white divide-y divide-gray-200"></tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- Summary Table -->
+            <div id="finesContainer" class="bg-white p-6 rounded-xl shadow-md mt-8">
+                <h2 class="text-xl font-bold mb-4"><i class="fas fa-chart-line mr-2"></i>Bảng tổng kết tiền phạt</h2>
+                <div class="overflow-x-auto">
+                    <table class="min-w-full divide-y divide-gray-200">
+                        <thead class="bg-gray-50">
+                            <tr>
+                                <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Người chơi</th>
+                                <th scope="col" class="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Số trận thua</th>
+                                <th scope="col" class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Tiền phạt (VND)</th>
+                            </tr>
+                        </thead>
+                        <tbody id="summaryTableBody" class="bg-white divide-y divide-gray-200"></tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <div class="mt-8 flex flex-col sm:flex-row justify-end gap-4">
+            <button id="exportImageBtn" class="bg-green-500 hover:bg-green-600 text-white font-bold py-3 px-6 rounded-lg transition duration-300">
+                <i class="fas fa-camera-retro mr-2"></i>Xuất Ảnh Tổng Kết
+            </button>
+            <button id="resetSessionBtn" class="bg-red-500 hover:bg-red-600 text-white font-bold py-3 px-6 rounded-lg transition duration-300">
+                <i class="fas fa-sync-alt mr-2"></i>Reset Buổi Chơi
+            </button>
+        </div>
+
+    </div>
+
+    <!-- Modal for Image Export -->
+    <div id="imageModal" class="fixed inset-0 bg-gray-600 bg-opacity-75 overflow-y-auto h-full w-full hidden z-50 flex items-center justify-center">
+        <div class="relative mx-auto p-5 border w-11/12 max-w-lg shadow-lg rounded-md bg-white">
+            <div class="mt-3 text-center">
+                <h3 class="text-lg leading-6 font-medium text-gray-900">Ảnh Tổng Kết Buổi Chơi</h3>
+                <div id="imageModalContent" class="mt-4 px-7 py-3 min-h-[200px] flex items-center justify-center bg-gray-100 rounded-lg">
+                    <p id="imageLoadingText">Đang tạo ảnh, vui lòng chờ...</p>
+                    <img id="resultImage" class="max-w-full h-auto hidden" />
+                </div>
+                <div class="items-center px-4 py-3 gap-3 flex flex-col sm:flex-row">
+                    <a id="downloadImageBtn" href="#" download="tong-ket-pickleball.png" class="w-full sm:w-auto px-4 py-2 bg-blue-500 text-white text-base font-medium rounded-md shadow-sm hover:bg-blue-600 focus:outline-none focus:ring-2 focus:ring-blue-300 hidden">
+                        <i class="fas fa-download mr-2"></i>Tải Ảnh Về
+                    </a>
+                    <button id="closeModalBtn" class="w-full sm:w-auto mt-2 sm:mt-0 px-4 py-2 bg-gray-200 text-gray-800 text-base font-medium rounded-md shadow-sm hover:bg-gray-300 focus:outline-none focus:ring-2 focus:ring-gray-300">
+                        Đóng
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <div id="toast"></div>
+
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+        import { getAuth, signInAnonymously, onAuthStateChanged, signInWithCustomToken } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { getFirestore, collection, doc, addDoc, onSnapshot, query, writeBatch, getDocs, deleteDoc, updateDoc, orderBy } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+
+        // --- START: Firebase Config ---
+        // DÁN FIREBASE CONFIG CỦA BẠN VÀO ĐÂY
+        const firebaseConfig = {
+  apiKey: "AIzaSyDRvpyEc0oVdBESigc5NoOlb_jFO9tLMwY",
+  authDomain: "pickbudget-df336.firebaseapp.com",
+  projectId: "pickbudget-df336",
+  storageBucket: "pickbudget-df336.firebasestorage.app",
+  messagingSenderId: "1007097338414",
+  appId: "1:1007097338414:web:82c65a5ae6784c83555dbf",
+  measurementId: "G-BEGDMV8RD7"
+};
+        // --- END: Firebase Config ---
+
+        const appId = typeof __app_id !== 'undefined' ? __app_id : 'pickleball-default';
+        const LOSER_FEE = 25000;
+
+        let app, auth, db, userId;
+        let allPlayers = [];
+        let matches = [];
+        let teamA = [];
+        let teamB = [];
+        let unsubscribePlayers, unsubscribeMatches;
+
+        try {
+            app = initializeApp(firebaseConfig);
+            auth = getAuth(app);
+            db = getFirestore(app);
+        } catch (e) {
+            console.error("Firebase initialization failed:", e);
+            document.body.innerHTML = '<div class="text-center p-8 text-red-500">Lỗi kết nối Firebase. Vui lòng kiểm tra lại `firebaseConfig` trong code.</div>';
+        }
+
+        const playerListEl = document.getElementById('playerList');
+        const newPlayerNameInput = document.getElementById('newPlayerName');
+        const addPlayerBtn = document.getElementById('addPlayerBtn');
+        const summaryTableBody = document.getElementById('summaryTableBody');
+        const matchHistoryBody = document.getElementById('matchHistoryBody');
+        const exportImageBtn = document.getElementById('exportImageBtn');
+        const resetSessionBtn = document.getElementById('resetSessionBtn');
+        const imageModal = document.getElementById('imageModal');
+        const closeModalBtn = document.getElementById('closeModalBtn');
+        const downloadImageBtn = document.getElementById('downloadImageBtn');
+        const resultImage = document.getElementById('resultImage');
+        const imageLoadingText = document.getElementById('imageLoadingText');
+        const userIdDisplay = document.getElementById('userIdDisplay');
+        const teamADropzone = document.getElementById('teamADropzone');
+        const teamBDropzone = document.getElementById('teamBDropzone');
+        const playerPoolContainer = document.getElementById('playerPoolContainer');
+        const matchActionsEl = document.getElementById('matchActions');
+
+        onAuthStateChanged(auth, async (user) => {
+            if (user) {
+                userId = user.uid;
+                userIdDisplay.textContent = userId;
+                setupListeners();
+            } else {
+                try {
+                    if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
+                        await signInWithCustomToken(auth, __initial_auth_token);
+                    } else {
+                        await signInAnonymously(auth);
+                    }
+                } catch (error) {
+                    console.error("Authentication error:", error);
+                }
+            }
+        });
+
+        function setupListeners() {
+            if (unsubscribePlayers) unsubscribePlayers();
+            const playersQuery = query(collection(db, `artifacts/${appId}/users/${userId}/players`));
+            unsubscribePlayers = onSnapshot(playersQuery, (snapshot) => {
+                allPlayers = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+                renderAll();
+                updateSummary();
+                renderMatchHistory(); 
+            });
+
+            if (unsubscribeMatches) unsubscribeMatches();
+            const matchesQuery = query(collection(db, `artifacts/${appId}/users/${userId}/matches`), orderBy("createdAt", "desc"));
+            unsubscribeMatches = onSnapshot(matchesQuery, (snapshot) => {
+                matches = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+                updateSummary();
+                renderMatchHistory();
+            });
+        }
+        
+        function createPlayerCard(player) {
+            const card = document.createElement('div');
+            card.className = 'player-card p-3 border-2 bg-white border-gray-200 rounded-lg flex justify-between items-center';
+            card.dataset.playerId = player.id;
+            card.draggable = true;
+            card.innerHTML = `
+                <span class="font-medium">${player.name}</span>
+                <div class="flex items-center gap-3">
+                    <span class="actions">
+                        <i class="fas fa-edit text-blue-500 cursor-pointer edit-btn" title="Sửa tên"></i>
+                        <i class="fas fa-trash-alt text-red-500 cursor-pointer delete-btn ml-2" title="Xóa người chơi"></i>
+                    </span>
+                    <i class="fas fa-grip-vertical text-gray-400"></i>
+                </div>
+            `;
+            card.addEventListener('dragstart', handleDragStart);
+            card.addEventListener('dragend', handleDragEnd);
+            
+            card.querySelector('.edit-btn').addEventListener('click', (e) => {
+                e.stopPropagation();
+                handleEditPlayer(player.id, player.name);
+            });
+            card.querySelector('.delete-btn').addEventListener('click', (e) => {
+                e.stopPropagation();
+                handleDeletePlayer(player.id, player.name);
+            });
+
+            return card;
+        }
+
+        function renderAll() {
+            renderAvailablePlayers();
+            renderTeams();
+            updateMatchActions();
+        }
+        
+        function renderAvailablePlayers() {
+            playerListEl.innerHTML = '';
+            const availablePlayers = allPlayers.filter(p => !teamA.includes(p.id) && !teamB.includes(p.id));
+            
+            if (availablePlayers.length === 0 && allPlayers.length > 0) {
+                 playerListEl.innerHTML = '<p class="text-gray-400 text-center p-4">Tất cả người chơi đã vào đội.</p>';
+            } else if (allPlayers.length === 0) {
+                playerListEl.innerHTML = '<p class="text-gray-500">Chưa có người chơi nào. Hãy thêm ở trên.</p>';
+            } else {
+                availablePlayers.forEach(player => {
+                    playerListEl.appendChild(createPlayerCard(player));
+                });
+            }
+        }
+
+        function renderTeams() {
+            teamADropzone.innerHTML = '';
+            teamBDropzone.innerHTML = '';
+            teamA.forEach(playerId => {
+                const player = allPlayers.find(p => p.id === playerId);
+                if(player) teamADropzone.appendChild(createPlayerCard(player));
+            });
+            teamB.forEach(playerId => {
+                const player = allPlayers.find(p => p.id === playerId);
+                if(player) teamBDropzone.appendChild(createPlayerCard(player));
+            });
+        }
+        
+        function updateMatchActions() {
+            if (teamA.length === 2 && teamB.length === 2) {
+                const teamAName = document.getElementById('teamAName').value || 'Đội A';
+                const teamBName = document.getElementById('teamBName').value || 'Đội B';
+                matchActionsEl.innerHTML = `
+                    <div class="flex items-end gap-4 justify-center">
+                        <div class="text-center">
+                            <label for="scoreA" class="font-semibold text-sm text-blue-800">${teamAName}</label>
+                            <input type="number" id="scoreA" class="w-20 p-2 text-center text-lg font-bold border-2 rounded-md" min="0">
+                        </div>
+                        <div class="text-gray-400 font-bold text-lg pb-2">-</div>
+                        <div class="text-center">
+                            <label for="scoreB" class="font-semibold text-sm text-green-800">${teamBName}</label>
+                            <input type="number" id="scoreB" class="w-20 p-2 text-center text-lg font-bold border-2 rounded-md" min="0">
+                        </div>
+                    </div>
+                    <button id="recordMatchBtn" class="mt-4 w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 px-4 rounded-lg transition">
+                        <i class="fas fa-check-circle mr-2"></i>Ghi Nhận Kết Quả
+                    </button>
+                `;
+                document.getElementById('recordMatchBtn').addEventListener('click', handleRecordResult);
+            } else {
+                matchActionsEl.innerHTML = '<p class="text-gray-500">Vui lòng kéo đủ 2 người vào mỗi đội để bắt đầu.</p>';
+            }
+        }
+
+        let draggedPlayerId = null;
+
+        function handleDragStart(e) {
+            if (e.target.classList.contains('edit-btn') || e.target.classList.contains('delete-btn')) {
+                e.preventDefault();
+                return;
+            }
+            draggedPlayerId = e.target.closest('.player-card').dataset.playerId;
+            e.dataTransfer.effectAllowed = 'move';
+            setTimeout(() => e.target.closest('.player-card').classList.add('dragging'), 0);
+        }
+
+        function handleDragEnd(e) {
+            const card = document.querySelector(`.player-card[data-player-id='${draggedPlayerId}']`);
+            if (card) card.classList.remove('dragging');
+            draggedPlayerId = null;
+        }
+
+        function handleDragOver(e) {
+            e.preventDefault();
+            const dropzone = e.target.closest('.dropzone');
+            if (dropzone) dropzone.classList.add('drag-over');
+        }
+
+        function handleDragLeave(e) {
+            const dropzone = e.target.closest('.dropzone');
+            if (dropzone) dropzone.classList.remove('drag-over');
+        }
+        
+        function handleDrop(e) {
+            e.preventDefault();
+            const dropzone = e.target.closest('.dropzone');
+            if (!dropzone || !draggedPlayerId) return;
+
+            dropzone.classList.remove('drag-over');
+            
+            teamA = teamA.filter(id => id !== draggedPlayerId);
+            teamB = teamB.filter(id => id !== draggedPlayerId);
+
+            if (dropzone.id === 'teamADropzone' && teamA.length < 2) {
+                teamA.push(draggedPlayerId);
+            } else if (dropzone.id === 'teamBDropzone' && teamB.length < 2) {
+                teamB.push(draggedPlayerId);
+            } else if (dropzone.id !== 'playerPoolContainer' && ( (dropzone.id === 'teamADropzone' && teamA.length >= 2) || (dropzone.id === 'teamBDropzone' && teamB.length >= 2) )) {
+                 showToast("Mỗi đội chỉ có thể có 2 người chơi.", true);
+            }
+
+            renderAll();
+        }
+
+        [teamADropzone, teamBDropzone, playerPoolContainer].forEach(zone => {
+            zone.addEventListener('dragover', handleDragOver);
+            zone.addEventListener('dragleave', handleDragLeave);
+            zone.addEventListener('drop', handleDrop);
+        });
+        
+        async function handleRecordResult() {
+            const scoreAEl = document.getElementById('scoreA');
+            const scoreBEl = document.getElementById('scoreB');
+            const scoreA = parseInt(scoreAEl.value, 10);
+            const scoreB = parseInt(scoreBEl.value, 10);
+
+            if (isNaN(scoreA) || isNaN(scoreB)) {
+                showToast("Vui lòng nhập đủ tỷ số cho cả hai đội.", true);
+                return;
+            }
+            if (scoreA === scoreB) {
+                showToast("Tỷ số không được bằng nhau.", true);
+                return;
+            }
+
+            const teamAName = document.getElementById('teamAName').value.trim();
+            const teamBName = document.getElementById('teamBName').value.trim();
+            
+            const winners = scoreA > scoreB ? teamA : teamB;
+            const losers = scoreA < scoreB ? teamA : teamB;
+            const winningTeamName = scoreA > scoreB ? teamAName : teamBName;
+            const losingTeamName = scoreA < scoreB ? teamAName : teamBName;
+            const winningScore = Math.max(scoreA, scoreB);
+            const losingScore = Math.min(scoreA, scoreB);
+            
+            const getPlayerNames = (idArray) => idArray.map(id => allPlayers.find(p => p.id === id)?.name || 'N/A');
+
+            const matchData = {
+                createdAt: new Date(),
+                winners: winners,
+                losers: losers,
+                winningTeam: { name: winningTeamName, players: getPlayerNames(winners) },
+                losingTeam: { name: losingTeamName, players: getPlayerNames(losers) },
+                score: `${winningScore} - ${losingScore}`
+            };
+
+            try {
+                await addDoc(collection(db, `artifacts/${appId}/users/${userId}/matches`), matchData);
+                showToast(`Đã ghi nhận trận đấu.`);
+                teamA = [];
+                teamB = [];
+                renderAll();
+            } catch (error) {
+                 console.error("Error recording match: ", error);
+                 showToast("Lỗi khi ghi nhận trận đấu", true);
+            }
+        }
+        
+        async function handleEditPlayer(playerId, currentName) {
+            const newName = prompt("Chỉnh sửa tên người chơi:", currentName);
+            if (newName && newName.trim() !== '' && newName.trim() !== currentName) {
+                try {
+                    const playerRef = doc(db, `artifacts/${appId}/users/${userId}/players`, playerId);
+                    await updateDoc(playerRef, { name: newName.trim() });
+                    showToast("Đã cập nhật tên người chơi.");
+                } catch (error) {
+                    console.error("Error updating player: ", error);
+                    showToast("Lỗi khi cập nhật tên.", true);
+                }
+            }
+        }
+
+        async function handleDeletePlayer(playerId, playerName) {
+            if (confirm(`Bạn có chắc chắn muốn xóa "${playerName}"?`)) {
+                 try {
+                    await deleteDoc(doc(db, `artifacts/${appId}/users/${userId}/players`, playerId));
+                    teamA = teamA.filter(id => id !== playerId);
+                    teamB = teamB.filter(id => id !== playerId);
+                    renderAll();
+                    showToast(`Đã xóa người chơi "${playerName}".`);
+                } catch (error) {
+                    console.error("Error deleting player: ", error);
+                    showToast("Lỗi khi xóa người chơi.", true);
+                }
+            }
+        }
+
+        addPlayerBtn.addEventListener('click', async () => {
+            const namesString = newPlayerNameInput.value.trim();
+            if (!namesString) return;
+
+            const names = namesString.split(',').map(name => name.trim()).filter(name => name !== '');
+            if (names.length === 0) return;
+
+            try {
+                const batch = writeBatch(db);
+                names.forEach(name => {
+                    const newPlayerRef = doc(collection(db, `artifacts/${appId}/users/${userId}/players`));
+                    batch.set(newPlayerRef, { name });
+                });
+                await batch.commit();
+                newPlayerNameInput.value = '';
+                showToast(`Đã thêm thành công ${names.length} người chơi.`);
+            } catch (e) {
+                console.error("Error adding players: ", e);
+                showToast("Lỗi khi thêm người chơi", true);
+            }
+        });
+
+        newPlayerNameInput.addEventListener('keypress', (e) => e.key === 'Enter' && addPlayerBtn.click());
+        
+        function renderMatchHistory() {
+            matchHistoryBody.innerHTML = '';
+            if (matches.length === 0) {
+                matchHistoryBody.innerHTML = '<tr><td colspan="3" class="text-center py-4 text-gray-500">Chưa có trận đấu nào được ghi nhận.</td></tr>';
+                return;
+            }
+
+            matches.forEach(match => {
+                const row = document.createElement('tr');
+                row.innerHTML = `
+                    <td class="px-4 py-4">
+                        <div class="font-bold text-green-600">${match.winningTeam.name}</div>
+                        <div class="text-sm text-gray-500">${match.winningTeam.players.join(' & ')}</div>
+                    </td>
+                    <td class="px-4 py-4">
+                        <div class="font-bold text-red-600">${match.losingTeam.name}</div>
+                        <div class="text-sm text-gray-500">${match.losingTeam.players.join(' & ')}</div>
+                    </td>
+                    <td class="px-4 py-4 text-center">
+                        <span class="text-lg font-bold text-gray-800">${match.score}</span>
+                    </td>
+                `;
+                matchHistoryBody.appendChild(row);
+            });
+        }
+
+        function updateSummary() {
+            summaryTableBody.innerHTML = '';
+            if (allPlayers.length === 0) {
+                 summaryTableBody.innerHTML = '<tr><td colspan="3" class="text-center py-4 text-gray-500">Chưa có dữ liệu</td></tr>';
+                 return;
+            }
+
+            const summary = allPlayers.map(player => {
+                const losses = matches.reduce((count, match) => count + (match.losers.includes(player.id) ? 1 : 0), 0);
+                return { ...player, losses, due: losses * LOSER_FEE };
+            });
+
+            summary.forEach(player => {
+                const row = document.createElement('tr');
+                row.innerHTML = `
+                    <td class="px-6 py-4 whitespace-nowrap"><div class="text-sm font-medium text-gray-900">${player.name}</div></td>
+                    <td class="px-6 py-4 whitespace-nowrap text-center"><span class="text-sm font-semibold ${player.losses > 0 ? 'text-red-600' : 'text-green-600'}">${player.losses}</span></td>
+                    <td class="px-6 py-4 whitespace-nowrap text-right"><span class="text-sm font-semibold text-gray-800">${player.due.toLocaleString('vi-VN')}</span></td>
+                `;
+                summaryTableBody.appendChild(row);
+            });
+        }
+        
+        resetSessionBtn.addEventListener('click', async () => {
+            if (confirm('Bạn có chắc chắn muốn xoá TẤT CẢ các trận đã đấu và bắt đầu lại không? Hành động này không thể hoàn tác.')) {
+                try {
+                    const matchesCollection = collection(db, `artifacts/${appId}/users/${userId}/matches`);
+                    const querySnapshot = await getDocs(matchesCollection);
+                    const batch = writeBatch(db);
+                    querySnapshot.forEach((doc) => batch.delete(doc.ref));
+                    await batch.commit();
+                    teamA = []; teamB = []; renderAll();
+                    showToast("Đã reset buổi chơi thành công.");
+                } catch (error) {
+                    console.error("Error resetting session: ", error);
+                    showToast("Lỗi khi reset buổi chơi.", true);
+                }
+            }
+        });
+
+        exportImageBtn.addEventListener('click', () => {
+            imageModal.classList.remove('hidden');
+            resultImage.classList.add('hidden');
+            downloadImageBtn.classList.add('hidden');
+            imageLoadingText.classList.remove('hidden');
+
+            const summarySection = document.getElementById('summarySection');
+            
+            html2canvas(summarySection, { 
+                scale: 2, // Tăng chất lượng ảnh
+                useCORS: true,
+                backgroundColor: '#f9fafb' // Màu nền của body
+            }).then(canvas => {
+                const imageUrl = canvas.toDataURL('image/png');
+                resultImage.src = imageUrl;
+                downloadImageBtn.href = imageUrl;
+
+                resultImage.classList.remove('hidden');
+                downloadImageBtn.classList.remove('hidden');
+                imageLoadingText.classList.add('hidden');
+            }).catch(err => {
+                console.error("Lỗi khi tạo ảnh:", err);
+                imageLoadingText.textContent = "Đã xảy ra lỗi khi tạo ảnh.";
+            });
+        });
+
+        closeModalBtn.addEventListener('click', () => imageModal.classList.add('hidden'));
+
+        function showToast(message, isError = false) {
+            const toast = document.getElementById('toast');
+            toast.textContent = message;
+            toast.className = 'show';
+            toast.style.backgroundColor = isError ? '#EF4444' : '#22C55E';
+            setTimeout(() => { toast.className = toast.className.replace('show', ''); }, 3000);
+        }
+    </script>
+</body>
+</html>
